@@ -1,12 +1,13 @@
 --[[ 
-    DANDY'S WORLD: POORLY SCRIPTED STUFF v2.7
+    DANDY'S WORLD: POORLY SCRIPTED STUFF v4.1
     macOS / iOS 25 Aesthetic Library + Smart ESP
-    Updated: Real-time Player HP Tracking (Stats -> Health)
-    Features: Teleports to Elevator, Named Twisteds/Items, Fixed WalkSpeed
+    Updated: Renamed Buttons for Cleaner UI
+    Features: Auto Skillcheck, Smart Noclip, Real-time HP, Gen Rush
 ]]
 
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 local RunService = game:GetService("RunService")
 local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
@@ -14,6 +15,7 @@ local Workspace = game:GetService("Workspace")
 local Lighting = game:GetService("Lighting")
 
 local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
 --// THEME CONFIGURATION
 local Theme = {
@@ -44,13 +46,16 @@ local ESP_Settings = {
 
 local WalkSpeedEnabled = false
 local WalkSpeedValue = 24
+local NoclipEnabled = false
+local AutoSkillCheckEnabled = false
+local AutoEscapeEnabled = false 
+local NoclipConnection = nil
 local ESP_Storage = {} 
 
 --// UTILITY: ESP FUNCTIONS
 local function GetPlayerHealth(plr)
     local char = plr.Character
     if char then
-        -- Updated: Targeted check for Stats > Health from screenshots
         local stats = char:FindFirstChild("Stats")
         if stats then
             local healthVal = stats:FindFirstChild("Health")
@@ -59,13 +64,12 @@ local function GetPlayerHealth(plr)
             end
         end
     end
-    return "?" -- Return placeholder if data is missing
+    return "?"
 end
 
 local function CreateHighlight(model, color, name, isPlayer, playerObj, showBillboard)
     if not model then return end
     
-    -- Real-time update logic: If the Billboard already exists, just update the text
     local existingBillboard = model:FindFirstChild("DW_ESP_Text")
     if existingBillboard and isPlayer and playerObj then
         existingBillboard.TextLabel.Text = playerObj.Name .. " (" .. GetPlayerHealth(playerObj) .. ")"
@@ -74,7 +78,6 @@ local function CreateHighlight(model, color, name, isPlayer, playerObj, showBill
 
     if model:FindFirstChild("DW_ESP") then return end 
 
-    -- Create new Highlight
     local highlight = Instance.new("Highlight")
     highlight.Name = "DW_ESP"
     highlight.Adornee = model
@@ -84,7 +87,6 @@ local function CreateHighlight(model, color, name, isPlayer, playerObj, showBill
     highlight.OutlineTransparency = 0.1
     highlight.Parent = model
 
-    -- Create new Billboard
     local billboard
     if showBillboard then
         billboard = Instance.new("BillboardGui")
@@ -98,7 +100,6 @@ local function CreateHighlight(model, color, name, isPlayer, playerObj, showBill
         local text = Instance.new("TextLabel")
         text.Size = UDim2.new(1, 0, 1, 0)
         text.BackgroundTransparency = 1
-        -- Initial text setting
         text.Text = isPlayer and (playerObj.Name .. " (" .. GetPlayerHealth(playerObj) .. ")") or name
         text.TextColor3 = color
         text.TextStrokeTransparency = 0
@@ -111,7 +112,6 @@ local function CreateHighlight(model, color, name, isPlayer, playerObj, showBill
 end
 
 local function RefreshESP()
-    -- Cleanup and Update Loop
     for i = #ESP_Storage, 1, -1 do
         local data = ESP_Storage[i]
         local shouldExist = false
@@ -128,7 +128,6 @@ local function RefreshESP()
         end
     end
 
-    -- Update Players
     if ESP_Settings.Players.Enabled then
         for _, plr in pairs(Players:GetPlayers()) do
             if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
@@ -137,12 +136,10 @@ local function RefreshESP()
         end
     end
 
-    -- Update World Objects
     local currentRoomFolder = Workspace:FindFirstChild("CurrentRoom")
     if currentRoomFolder then
         local roomModel = currentRoomFolder:GetChildren()[1]
         if roomModel then
-            -- Twisteds
             if ESP_Settings.Twisteds.Enabled then
                 local monsterFolder = roomModel:FindFirstChild("Monsters")
                 if monsterFolder then
@@ -156,7 +153,6 @@ local function RefreshESP()
                 end
             end
             
-            -- Generators
             if ESP_Settings.Generators.Enabled then
                 local genFolder = roomModel:FindFirstChild("Generators")
                 if genFolder then
@@ -166,7 +162,6 @@ local function RefreshESP()
                 end
             end
 
-            -- Items
             if ESP_Settings.Items.Enabled then
                 local itemFolder = roomModel:FindFirstChild("Items")
                 if itemFolder then
@@ -181,6 +176,121 @@ end
 
 RunService.Stepped:Connect(RefreshESP)
 
+--// SMART NOCLIP (Lag-Free)
+local function ModifyPartCollision(part, noclipActive)
+    if not part:IsA("BasePart") then return end
+    local name = part.Name:lower()
+    if name:find("floor") or name:find("ground") or name:find("base") then return end
+    part.CanCollide = not noclipActive
+end
+
+local function ToggleNoclipSystem(enable)
+    local cr = Workspace:FindFirstChild("CurrentRoom")
+    if enable then
+        if cr then for _, v in pairs(cr:GetDescendants()) do ModifyPartCollision(v, true) end end
+        if NoclipConnection then NoclipConnection:Disconnect() end
+        NoclipConnection = Workspace.DescendantAdded:Connect(function(descendant)
+            if NoclipEnabled and descendant:IsDescendantOf(Workspace:FindFirstChild("CurrentRoom")) then
+                task.wait() 
+                ModifyPartCollision(descendant, true)
+            end
+        end)
+    else
+        if NoclipConnection then NoclipConnection:Disconnect() NoclipConnection = nil end
+        if cr then for _, v in pairs(cr:GetDescendants()) do ModifyPartCollision(v, false) end end
+    end
+end
+
+--// AUTO SKILLCHECK
+local function AttemptAutoSkillcheck()
+    local pGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not pGui then return end
+
+    local screenGui = pGui:FindFirstChild("ScreenGui")
+    if screenGui then
+        local menu = screenGui:FindFirstChild("Menu")
+        if menu then
+            local skillFrame = menu:FindFirstChild("SkillCheckFrame")
+            if skillFrame and skillFrame.Visible then
+                local Marker = skillFrame:FindFirstChild("Marker")
+                local GoldZone = skillFrame:FindFirstChild("GoldArea")
+                if Marker and GoldZone and Marker.Visible and GoldZone.Visible then
+                    local cursorX = Marker.AbsolutePosition.X
+                    local goldX_Min = GoldZone.AbsolutePosition.X
+                    local goldX_Max = GoldZone.AbsolutePosition.X + GoldZone.AbsoluteSize.X
+                    
+                    if cursorX >= goldX_Min and cursorX <= goldX_Max then
+                        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
+                        RunService.RenderStepped:Wait()
+                        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+                        task.wait(1.5) 
+                    end
+                end
+            end
+        end
+    end
+
+    local circleGui = pGui:FindFirstChild("CircleSkillCheckGui")
+    if circleGui and circleGui.Enabled then
+        local frame = circleGui:FindFirstChild("SkillCheckFrame")
+        if frame then
+            local container = frame:FindFirstChild("Container")
+            if container then
+                local shrinking = container:FindFirstChild("ShrinkingCircle")
+                local yellow = container:FindFirstChild("YellowCircle")
+                
+                if shrinking and yellow and shrinking.Visible and yellow.Visible then
+                    local sSize = shrinking.AbsoluteSize.X
+                    local ySize = yellow.AbsoluteSize.X
+                    
+                    if sSize <= ySize and sSize >= (ySize - 20) then
+                        local viewportSize = workspace.CurrentCamera.ViewportSize
+                        VirtualInputManager:SendMouseButtonEvent(viewportSize.X/2, viewportSize.Y/2, 0, true, game, 1)
+                        RunService.RenderStepped:Wait()
+                        VirtualInputManager:SendMouseButtonEvent(viewportSize.X/2, viewportSize.Y/2, 0, false, game, 1)
+                        task.wait(1) 
+                    end
+                end
+            end
+        end
+    end
+end
+
+RunService.RenderStepped:Connect(function()
+    if AutoSkillCheckEnabled then
+        AttemptAutoSkillcheck()
+    end
+end)
+
+--// AUTO ESCAPE LOGIC
+task.spawn(function()
+    while task.wait(0.5) do
+        if AutoEscapeEnabled then
+            pcall(function()
+                local info = Workspace:FindFirstChild("Info")
+                if info then
+                    local panicVal = info:FindFirstChild("Panic")
+                    if panicVal and panicVal.Value == true then
+                        local elevatorFolder = Workspace:FindFirstChild("Elevators")
+                        if elevatorFolder then
+                            local elevator = elevatorFolder:FindFirstChild("Elevator")
+                            if elevator then
+                                local spawnZones = elevator:FindFirstChild("SpawnZones")
+                                if spawnZones and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                                    local target = spawnZones:IsA("BasePart") and spawnZones or spawnZones:FindFirstChildOfClass("BasePart")
+                                    if target then
+                                        LocalPlayer.Character.HumanoidRootPart.CFrame = target.CFrame + Vector3.new(0, 3, 0)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
+
 -- WalkSpeed Handler
 task.spawn(function()
     while task.wait() do
@@ -188,29 +298,26 @@ task.spawn(function()
             if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
                 local hum = LocalPlayer.Character.Humanoid
                 if WalkSpeedEnabled then
-                    if hum.WalkSpeed < WalkSpeedValue then
-                        hum.WalkSpeed = WalkSpeedValue
-                    end
+                    if hum.WalkSpeed < WalkSpeedValue then hum.WalkSpeed = WalkSpeedValue end
                 else
-                    if hum.WalkSpeed == WalkSpeedValue then
-                        hum.WalkSpeed = 16
-                    end
+                    if hum.WalkSpeed == WalkSpeedValue then hum.WalkSpeed = 16 end
                 end
             end
         end)
     end
 end)
 
---// GUI LIBRARY (macOS Style)
+--// GUI LIBRARY
 local Library = {}
 
 function Library:Init()
-    if CoreGui:FindFirstChild("DandysWorld_macOS") then CoreGui.DandysWorld_macOS:Destroy() end
+    if PlayerGui:FindFirstChild("DandysWorld_macOS") then PlayerGui.DandysWorld_macOS:Destroy() end
 
     local ScreenGui = Instance.new("ScreenGui")
     ScreenGui.Name = "DandysWorld_macOS"
-    ScreenGui.Parent = CoreGui
+    ScreenGui.Parent = PlayerGui
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    ScreenGui.ResetOnSpawn = false
 
     local MainFrame = Instance.new("Frame")
     MainFrame.Name = "Window"
@@ -475,6 +582,13 @@ local MainTab = Window:CreateTab("Main")
 
 MainTab:CreateToggle("Enable WalkSpeed", function(val) WalkSpeedEnabled = val end)
 MainTab:CreateSlider("WalkSpeed Value", 16, 150, 24, function(val) WalkSpeedValue = val end)
+MainTab:CreateToggle("Noclip", function(val) 
+    NoclipEnabled = val
+    ToggleNoclipSystem(val)
+end)
+MainTab:CreateToggle("Auto Skillcheck", function(val)
+    AutoSkillCheckEnabled = val
+end)
 
 local VisualsTab = Window:CreateTab("Visuals")
 VisualsTab:CreateToggle("ESP Twisteds", function(val) ESP_Settings.Twisteds.Enabled = val end)
@@ -499,6 +613,52 @@ TeleportTab:CreateButton("Teleport to Elevator", function()
     end)
 end)
 
+TeleportTab:CreateToggle("Auto TP Elevator", function(val)
+    AutoEscapeEnabled = val
+end)
+
+TeleportTab:CreateButton("TP to Uncompleted Machine", function()
+    pcall(function()
+        local currentRoom = Workspace:FindFirstChild("CurrentRoom")
+        if not currentRoom then return end
+        
+        local generatorsFolder = nil
+        for _, child in pairs(currentRoom:GetChildren()) do
+            generatorsFolder = child:FindFirstChild("Generators")
+            if generatorsFolder then break end
+        end
+        
+        if not generatorsFolder then return end
+        
+        local targetGenerator = nil
+        for _, gen in pairs(generatorsFolder:GetChildren()) do
+            local stats = gen:FindFirstChild("Stats")
+            if stats then
+                local completedVal = stats:FindFirstChild("Completed")
+                if completedVal and completedVal.Value == false then
+                    targetGenerator = gen
+                    break
+                end
+            end
+        end
+        
+        if targetGenerator and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local tpPosFolder = targetGenerator:FindFirstChild("TeleportPositions")
+            local targetCFrame = nil
+            
+            if tpPosFolder and #tpPosFolder:GetChildren() > 0 then
+                targetCFrame = tpPosFolder:GetChildren()[1].CFrame
+            else
+                targetCFrame = targetGenerator:GetPivot()
+            end
+            
+            if targetCFrame then
+                LocalPlayer.Character.HumanoidRootPart.CFrame = targetCFrame + Vector3.new(0, 3, 0)
+            end
+        end
+    end)
+end)
+
 local StuffTab = Window:CreateTab("Stuff")
 StuffTab:CreateToggle("Fullbright", function(val)
     if val then
@@ -514,4 +674,4 @@ StuffTab:CreateToggle("Fullbright", function(val)
     end
 end)
 
-print("Poorly Scripted v2.7 - Real-time HP Tracking & Elevator TPs")
+print("Poorly Scripted v4.1 - Renamed Buttons")
