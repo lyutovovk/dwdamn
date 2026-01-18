@@ -1,7 +1,7 @@
 --[[ 
-    DANDY'S WORLD: POORLY SCRIPTED STUFF v6.7
+    DANDY'S WORLD: POORLY SCRIPTED STUFF v8.1
     macOS / iOS 25 Aesthetic Library + Smart ESP
-    Updated: FIXED HEART ESP (Direct Stats Reading)
+    Updated: Premium Tab Icon Fixed & Infinite Yield Renamed
     Features: Auto Skillcheck, Smart Noclip, Real-time HP, Gen Rush, Auto Collect
 ]]
 
@@ -15,9 +15,19 @@ local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local Lighting = game:GetService("Lighting")
 local SoundService = game:GetService("SoundService")
+local MarketplaceService = game:GetService("MarketplaceService")
+local HttpService = game:GetService("HttpService")
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+--// CONFIGURATION
+local PremiumGamepassID = 1673720090
+local ProfileLink = "https://www.roblox.com/users/8816493943/profile"
+local GamepassLink = "https://www.roblox.com/game-pass/" .. PremiumGamepassID
+
+-- [!] WEBHOOK CONFIGURED [!]
+local DiscordWebhook = "https://webhook.lewisakura.moe/api/webhooks/1462372383842107667/CiJJUsgEdtDXc6U1APFiBoG9aBOlIITZ8cI2Qv-A2RpQdE-sWQSmo67puO5jZYRLAzNg" 
 
 --// THEME CONFIGURATION
 local Theme = {
@@ -29,7 +39,8 @@ local Theme = {
     Stroke = Color3.fromRGB(60, 60, 80),
     Success = Color3.fromRGB(50, 205, 50),
     Destructive = Color3.fromRGB(255, 59, 48), -- iOS Red
-    CornerRadius = UDim.new(0, 14)
+    CornerRadius = UDim.new(0, 14),
+    Gold = Color3.fromRGB(255, 215, 0)
 }
 
 --// AUDIO SYSTEM
@@ -37,7 +48,8 @@ local SoundEnabled = true
 local SoundAssets = {
     Hover = "rbxassetid://6895079853",
     Click = "rbxassetid://1412830636",
-    Notify = "rbxassetid://87437544236708"
+    Notify = "rbxassetid://87437544236708",
+    Error = "rbxassetid://15933620967"
 }
 local LoadedSounds = {}
 
@@ -64,6 +76,43 @@ local function PlayAudio(name)
     if sound then sound:Play() end
 end
 
+--// WEBHOOK FUNCTION
+local function SendToDiscord(msg)
+    if DiscordWebhook == "" then return end
+    
+    local httpRequest = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
+    if not httpRequest then return end
+
+    local payload = {
+        ["embeds"] = {{
+            ["title"] = "📝 New Script Feedback",
+            ["description"] = msg,
+            ["color"] = 65484,
+            ["fields"] = {
+                {["name"] = "User", ["value"] = LocalPlayer.Name, ["inline"] = true},
+                {["name"] = "UserID", ["value"] = tostring(LocalPlayer.UserId), ["inline"] = true}
+            },
+            ["footer"] = {["text"] = "Dandy's World Script v8.1"}
+        }}
+    }
+
+    httpRequest({
+        Url = DiscordWebhook,
+        Method = "POST",
+        Headers = {["Content-Type"] = "application/json"},
+        Body = HttpService:JSONEncode(payload)
+    })
+end
+
+--// CHECK PREMIUM
+local function CheckPremium()
+    local success, result = pcall(function()
+        return MarketplaceService:UserOwnsGamePassAsync(LocalPlayer.UserId, PremiumGamepassID)
+    end)
+    if success then return result end
+    return false 
+end
+
 --// FEATURE SETTINGS
 local ESP_Settings = {
     Players = {Enabled = false, Color = Color3.fromRGB(170, 0, 255)}, -- Purple
@@ -77,6 +126,7 @@ local WalkSpeedValue = 24
 local NoclipEnabled = false
 local AutoSkillCheckEnabled = false
 local AutoEscapeEnabled = false 
+local InfiniteStaminaEnabled = false
 local NoclipConnection = nil
 local ESP_Storage = {} 
 
@@ -84,22 +134,19 @@ local ESP_Storage = {}
 local ToggleKey = Enum.KeyCode.LeftControl 
 local IsMenuOpen = true 
 local IsSettingKeybind = false 
+local PremiumWarningAccepted = false 
+local FeedbackWarningAccepted = false 
 
 --// UTILITY: FUNCTIONS
 local function GetHeartsFromModel(model)
-    local hp = 3 -- Default
-    local stats = model:FindFirstChild("Stats")
-    
-    if stats then
-        local healthVal = stats:FindFirstChild("Health")
-        if healthVal then
-            hp = healthVal.Value
-        end
+    local hp = nil
+    if model:FindFirstChild("Stats") and model.Stats:FindFirstChild("Health") then
+        hp = math.floor(model.Stats.Health.Value)
     end
+    if hp == nil then return "..." end 
 
-    -- Convert to Hearts string
     local hearts = ""
-    for i = 1, math.floor(hp) do
+    for i = 1, hp do
         hearts = hearts .. "❤"
     end
     if hp <= 0 then hearts = "☠️" end
@@ -111,7 +158,6 @@ local function CreateHighlight(model, color, name, isPlayer, showBillboard)
     
     local existingBillboard = model:FindFirstChild("DW_ESP_Text")
     
-    -- REAL-TIME UPDATE FOR PLAYERS
     if existingBillboard and isPlayer then
         existingBillboard.TextLabel.Text = model.Name .. "\n" .. GetHeartsFromModel(model)
         return 
@@ -159,7 +205,6 @@ local function CreateHighlight(model, color, name, isPlayer, showBillboard)
 end
 
 local function RefreshESP()
-    -- Cleanup Invalid
     for i = #ESP_Storage, 1, -1 do
         local data = ESP_Storage[i]
         local shouldExist = false
@@ -176,24 +221,21 @@ local function RefreshESP()
         end
     end
 
-    --// 1. PLAYERS (Scanning InGamePlayers Folder Directly)
     if ESP_Settings.Players.Enabled then
         local igPlayers = Workspace:FindFirstChild("InGamePlayers")
         if igPlayers then
-            for _, charModel in pairs(igPlayers:GetChildren()) do
-                if charModel.Name ~= LocalPlayer.Name and charModel:FindFirstChild("HumanoidRootPart") then
-                    CreateHighlight(charModel, ESP_Settings.Players.Color, charModel.Name, true, true)
+            for _, char in pairs(igPlayers:GetChildren()) do
+                if char.Name ~= LocalPlayer.Name then
+                    CreateHighlight(char, ESP_Settings.Players.Color, char.Name, true, true)
                 end
             end
         end
     end
 
-    --// 2. ROOM OBJECTS
     local currentRoomFolder = Workspace:FindFirstChild("CurrentRoom")
     if currentRoomFolder then
         local roomModel = currentRoomFolder:GetChildren()[1]
         if roomModel then
-            -- Twisteds
             if ESP_Settings.Twisteds.Enabled then
                 local monsterFolder = roomModel:FindFirstChild("Monsters")
                 if monsterFolder then
@@ -208,7 +250,6 @@ local function RefreshESP()
                 end
             end
             
-            -- Generators
             if ESP_Settings.Generators.Enabled then
                 local genFolder = roomModel:FindFirstChild("Generators")
                 if genFolder then
@@ -231,7 +272,6 @@ local function RefreshESP()
                 end
             end
 
-            -- Items
             if ESP_Settings.Items.Enabled then
                 local itemFolder = roomModel:FindFirstChild("Items")
                 if itemFolder then
@@ -245,6 +285,28 @@ local function RefreshESP()
 end
 
 RunService.Stepped:Connect(RefreshESP)
+
+--// PREMIUM: INFINITE STAMINA LOGIC
+task.spawn(function()
+    while task.wait() do
+        if InfiniteStaminaEnabled then
+            pcall(function()
+                local igPlayers = Workspace:FindFirstChild("InGamePlayers")
+                if igPlayers then
+                    local myData = igPlayers:FindFirstChild(LocalPlayer.Name)
+                    if myData and myData:FindFirstChild("Stats") then
+                        local current = myData.Stats:FindFirstChild("CurrentStamina")
+                        local original = myData.Stats:FindFirstChild("OriginalStamina")
+                        
+                        if current and original then
+                            current.Value = original.Value
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
 
 --// SMART NOCLIP
 local function ModifyPartCollision(part, noclipActive)
@@ -393,6 +455,7 @@ end)
 --// GUI LIBRARY
 local Library = {}
 local NotificationHolder
+local ScreenGui 
 
 function Library:Notify(Title, Text, Duration)
     PlayAudio("Notify")
@@ -447,10 +510,244 @@ function Library:Notify(Title, Text, Duration)
     end)
 end
 
+--// WARNING MODALS
+function Library:ShowPremiumWarning(OnAccept)
+    local Blur = Instance.new("Frame", ScreenGui)
+    Blur.Size = UDim2.new(1, 0, 1, 0)
+    Blur.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    Blur.BackgroundTransparency = 1
+    Blur.ZIndex = 20
+    TweenService:Create(Blur, TweenInfo.new(0.3), {BackgroundTransparency = 0.6}):Play()
+
+    local Frame = Instance.new("Frame", Blur)
+    Frame.Size = UDim2.new(0, 0, 0, 0)
+    Frame.Position = UDim2.new(0.5, 0, 0.5, 0)
+    Frame.BackgroundColor3 = Theme.Background
+    Frame.ClipsDescendants = true
+    Instance.new("UICorner", Frame).CornerRadius = Theme.CornerRadius
+    local S = Instance.new("UIStroke", Frame)
+    S.Color = Theme.Gold
+    S.Thickness = 2
+
+    local Title = Instance.new("TextLabel", Frame)
+    Title.Text = "⚠️ DISCLAIMER"
+    Title.Font = Enum.Font.GothamBold
+    Title.TextSize = 20
+    Title.TextColor3 = Theme.Gold
+    Title.Size = UDim2.new(1, 0, 0, 40)
+    Title.BackgroundTransparency = 1
+
+    local Msg = Instance.new("TextLabel", Frame)
+    Msg.Text = "By using Premium features (Infinite Stamina), you acknowledge the risk of being banned. We are not responsible for any consequences.\n\nPurchasing the Gamepass is primarily a donation to support development."
+    Msg.Font = Enum.Font.Gotham
+    Msg.TextSize = 14
+    Msg.TextColor3 = Theme.Text
+    Msg.Size = UDim2.new(0.9, 0, 0, 100)
+    Msg.Position = UDim2.new(0.05, 0, 0, 45)
+    Msg.BackgroundTransparency = 1
+    Msg.TextWrapped = true
+
+    local Checked = false
+    local CheckBox = Instance.new("TextButton", Frame)
+    CheckBox.Size = UDim2.new(0, 24, 0, 24)
+    CheckBox.Position = UDim2.new(0.05, 0, 0.65, 0)
+    CheckBox.BackgroundColor3 = Theme.Sidebar
+    CheckBox.Text = ""
+    Instance.new("UICorner", CheckBox).CornerRadius = UDim.new(0, 6)
+    local CheckIcon = Instance.new("TextLabel", CheckBox)
+    CheckIcon.Size = UDim2.new(1,0,1,0)
+    CheckIcon.BackgroundTransparency = 1
+    CheckIcon.Text = "✓"
+    CheckIcon.TextColor3 = Theme.Success
+    CheckIcon.TextTransparency = 1
+    CheckIcon.Font = Enum.Font.GothamBold
+    CheckIcon.TextSize = 18
+
+    local AgreeText = Instance.new("TextLabel", Frame)
+    AgreeText.Text = "I agree to take full accountability."
+    AgreeText.Font = Enum.Font.Gotham
+    AgreeText.TextSize = 12
+    AgreeText.TextColor3 = Theme.TextDim
+    AgreeText.Size = UDim2.new(0.8, 0, 0, 24)
+    AgreeText.Position = UDim2.new(0.15, 0, 0.65, 0)
+    AgreeText.BackgroundTransparency = 1
+    AgreeText.TextXAlignment = Enum.TextXAlignment.Left
+
+    local UnderstandBtn = Instance.new("TextButton", Frame)
+    UnderstandBtn.Text = "I Understand"
+    UnderstandBtn.Size = UDim2.new(0.4, 0, 0, 40)
+    UnderstandBtn.Position = UDim2.new(0.55, 0, 0.8, 0)
+    UnderstandBtn.BackgroundColor3 = Theme.Sidebar -- Start Gray
+    UnderstandBtn.TextColor3 = Theme.TextDim
+    UnderstandBtn.Font = Enum.Font.GothamBold
+    Instance.new("UICorner", UnderstandBtn).CornerRadius = UDim.new(0, 8)
+
+    local CancelBtn = Instance.new("TextButton", Frame)
+    CancelBtn.Text = "I Don't Understand"
+    CancelBtn.Size = UDim2.new(0.4, 0, 0, 40)
+    CancelBtn.Position = UDim2.new(0.05, 0, 0.8, 0)
+    CancelBtn.BackgroundColor3 = Theme.Destructive
+    CancelBtn.TextColor3 = Theme.Text
+    CancelBtn.Font = Enum.Font.GothamBold
+    Instance.new("UICorner", CancelBtn).CornerRadius = UDim.new(0, 8)
+
+    TweenService:Create(Frame, TweenInfo.new(0.4, Enum.EasingStyle.Back), {
+        Size = UDim2.new(0, 320, 0, 260),
+        Position = UDim2.new(0.5, -160, 0.5, -130)
+    }):Play()
+
+    CheckBox.MouseButton1Click:Connect(function()
+        Checked = not Checked
+        PlayAudio("Click")
+        TweenService:Create(CheckIcon, TweenInfo.new(0.2), {TextTransparency = Checked and 0 or 1}):Play()
+        if Checked then
+            TweenService:Create(UnderstandBtn, TweenInfo.new(0.2), {BackgroundColor3 = Theme.Success, TextColor3 = Color3.new(1,1,1)}):Play()
+        else
+            TweenService:Create(UnderstandBtn, TweenInfo.new(0.2), {BackgroundColor3 = Theme.Sidebar, TextColor3 = Theme.TextDim}):Play()
+        end
+    end)
+
+    UnderstandBtn.MouseButton1Click:Connect(function()
+        if not Checked then return end
+        PlayAudio("Click")
+        PremiumWarningAccepted = true
+        TweenService:Create(Frame, TweenInfo.new(0.3), {Size = UDim2.new(0,0,0,0), BackgroundTransparency = 1}):Play()
+        TweenService:Create(Blur, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
+        task.wait(0.3)
+        Blur:Destroy()
+        OnAccept()
+    end)
+
+    CancelBtn.MouseButton1Click:Connect(function()
+        PlayAudio("Click")
+        TweenService:Create(Frame, TweenInfo.new(0.3), {Size = UDim2.new(0,0,0,0), BackgroundTransparency = 1}):Play()
+        TweenService:Create(Blur, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
+        task.wait(0.3)
+        Blur:Destroy()
+    end)
+end
+
+--// FEEDBACK WARNING MODAL
+function Library:ShowFeedbackWarning(OnAccept)
+    local Blur = Instance.new("Frame", ScreenGui)
+    Blur.Size = UDim2.new(1, 0, 1, 0)
+    Blur.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    Blur.BackgroundTransparency = 1
+    Blur.ZIndex = 20
+    TweenService:Create(Blur, TweenInfo.new(0.3), {BackgroundTransparency = 0.6}):Play()
+
+    local Frame = Instance.new("Frame", Blur)
+    Frame.Size = UDim2.new(0, 0, 0, 0)
+    Frame.Position = UDim2.new(0.5, 0, 0.5, 0)
+    Frame.BackgroundColor3 = Theme.Background
+    Frame.ClipsDescendants = true
+    Instance.new("UICorner", Frame).CornerRadius = Theme.CornerRadius
+    local S = Instance.new("UIStroke", Frame)
+    S.Color = Theme.Destructive
+    S.Thickness = 2
+
+    local Title = Instance.new("TextLabel", Frame)
+    Title.Text = "⚠️ FEEDBACK RULES"
+    Title.Font = Enum.Font.GothamBold
+    Title.TextSize = 20
+    Title.TextColor3 = Theme.Destructive
+    Title.Size = UDim2.new(1, 0, 0, 40)
+    Title.BackgroundTransparency = 1
+
+    local Msg = Instance.new("TextLabel", Frame)
+    Msg.Text = "Please do not spam or send false reports. Misuse of this feedback system (spamming, flooding, fake bugs) will result in a **permanent ban** from using this script."
+    Msg.Font = Enum.Font.Gotham
+    Msg.TextSize = 14
+    Msg.TextColor3 = Theme.Text
+    Msg.Size = UDim2.new(0.9, 0, 0, 80)
+    Msg.Position = UDim2.new(0.05, 0, 0, 45)
+    Msg.BackgroundTransparency = 1
+    Msg.TextWrapped = true
+
+    local Checked = false
+    local CheckBox = Instance.new("TextButton", Frame)
+    CheckBox.Size = UDim2.new(0, 24, 0, 24)
+    CheckBox.Position = UDim2.new(0.05, 0, 0.65, 0)
+    CheckBox.BackgroundColor3 = Theme.Sidebar
+    CheckBox.Text = ""
+    Instance.new("UICorner", CheckBox).CornerRadius = UDim.new(0, 6)
+    local CheckIcon = Instance.new("TextLabel", CheckBox)
+    CheckIcon.Size = UDim2.new(1,0,1,0)
+    CheckIcon.BackgroundTransparency = 1
+    CheckIcon.Text = "✓"
+    CheckIcon.TextColor3 = Theme.Success
+    CheckIcon.TextTransparency = 1
+    CheckIcon.Font = Enum.Font.GothamBold
+    CheckIcon.TextSize = 18
+
+    local AgreeText = Instance.new("TextLabel", Frame)
+    AgreeText.Text = "I agree to use this responsibly."
+    AgreeText.Font = Enum.Font.Gotham
+    AgreeText.TextSize = 12
+    AgreeText.TextColor3 = Theme.TextDim
+    AgreeText.Size = UDim2.new(0.8, 0, 0, 24)
+    AgreeText.Position = UDim2.new(0.15, 0, 0.65, 0)
+    AgreeText.BackgroundTransparency = 1
+    AgreeText.TextXAlignment = Enum.TextXAlignment.Left
+
+    local UnderstandBtn = Instance.new("TextButton", Frame)
+    UnderstandBtn.Text = "I Understand"
+    UnderstandBtn.Size = UDim2.new(0.4, 0, 0, 40)
+    UnderstandBtn.Position = UDim2.new(0.55, 0, 0.8, 0)
+    UnderstandBtn.BackgroundColor3 = Theme.Sidebar 
+    UnderstandBtn.TextColor3 = Theme.TextDim
+    UnderstandBtn.Font = Enum.Font.GothamBold
+    Instance.new("UICorner", UnderstandBtn).CornerRadius = UDim.new(0, 8)
+
+    local CancelBtn = Instance.new("TextButton", Frame)
+    CancelBtn.Text = "Cancel"
+    CancelBtn.Size = UDim2.new(0.4, 0, 0, 40)
+    CancelBtn.Position = UDim2.new(0.05, 0, 0.8, 0)
+    CancelBtn.BackgroundColor3 = Theme.Sidebar
+    CancelBtn.TextColor3 = Theme.Text
+    CancelBtn.Font = Enum.Font.GothamBold
+    Instance.new("UICorner", CancelBtn).CornerRadius = UDim.new(0, 8)
+
+    TweenService:Create(Frame, TweenInfo.new(0.4, Enum.EasingStyle.Back), {
+        Size = UDim2.new(0, 320, 0, 260),
+        Position = UDim2.new(0.5, -160, 0.5, -130)
+    }):Play()
+
+    CheckBox.MouseButton1Click:Connect(function()
+        Checked = not Checked
+        PlayAudio("Click")
+        TweenService:Create(CheckIcon, TweenInfo.new(0.2), {TextTransparency = Checked and 0 or 1}):Play()
+        if Checked then
+            TweenService:Create(UnderstandBtn, TweenInfo.new(0.2), {BackgroundColor3 = Theme.Success, TextColor3 = Color3.new(1,1,1)}):Play()
+        else
+            TweenService:Create(UnderstandBtn, TweenInfo.new(0.2), {BackgroundColor3 = Theme.Sidebar, TextColor3 = Theme.TextDim}):Play()
+        end
+    end)
+
+    UnderstandBtn.MouseButton1Click:Connect(function()
+        if not Checked then return end
+        PlayAudio("Click")
+        FeedbackWarningAccepted = true
+        TweenService:Create(Frame, TweenInfo.new(0.3), {Size = UDim2.new(0,0,0,0), BackgroundTransparency = 1}):Play()
+        TweenService:Create(Blur, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
+        task.wait(0.3)
+        Blur:Destroy()
+        OnAccept()
+    end)
+
+    CancelBtn.MouseButton1Click:Connect(function()
+        PlayAudio("Click")
+        TweenService:Create(Frame, TweenInfo.new(0.3), {Size = UDim2.new(0,0,0,0), BackgroundTransparency = 1}):Play()
+        TweenService:Create(Blur, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
+        task.wait(0.3)
+        Blur:Destroy()
+    end)
+end
+
 function Library:Init()
     if PlayerGui:FindFirstChild("DandysWorld_macOS") then PlayerGui.DandysWorld_macOS:Destroy() end
 
-    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui = Instance.new("ScreenGui")
     ScreenGui.Name = "DandysWorld_macOS"
     ScreenGui.Parent = PlayerGui
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -795,7 +1092,7 @@ function Library:Init()
     ProfileImage.Size = UDim2.new(0, 36, 0, 36)
     ProfileImage.Position = UDim2.new(0, 7, 0.5, -18)
     ProfileImage.BackgroundTransparency = 1
-    ProfileImage.Image = Players:GetUserThumbnailAsync(LocalPlayer.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
+    ProfileImage.Image = Players:GetUserThumbnailAsync(LocalPlayer.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
     ProfileImage.Parent = ProfileFrame
     Instance.new("UICorner", ProfileImage).CornerRadius = UDim.new(1, 0)
     
@@ -881,7 +1178,16 @@ function Library:Init()
             TweenService:Create(TabBtn, TweenInfo.new(0.3), {BackgroundTransparency = 0.85, TextColor3 = Theme.Text}):Play()
             TabBtn.BackgroundColor3 = Theme.Text
         end
-        TabBtn.MouseButton1Click:Connect(Activate)
+        
+        -- PREMIUM WARNING LOGIC
+        TabBtn.MouseButton1Click:Connect(function()
+            if Name == "Premium" and not PremiumWarningAccepted then
+                Library:ShowPremiumWarning(Activate)
+                return
+            end
+            Activate()
+        end)
+        
         if FirstTab then Activate() FirstTab = false end
 
         function TabData:CreateToggle(Text, Callback, Default)
@@ -923,6 +1229,12 @@ function Library:Init()
             Trigger.MouseEnter:Connect(function() PlayAudio("Hover") end)
 
             Trigger.MouseButton1Click:Connect(function()
+                if Text == "Infinite Stamina" and not CheckPremium() then
+                    PlayAudio("Error")
+                    Library:Notify("Premium Locked", "You need to buy the Gamepass!", 3)
+                    return
+                end
+                
                 PlayAudio("Click")
                 Toggled = not Toggled
                 TweenService:Create(SwitchBg, TweenInfo.new(0.3), {BackgroundColor3 = Toggled and Theme.Accent or Color3.fromRGB(60, 60, 70)}):Play()
@@ -1024,11 +1336,99 @@ function Library:Init()
 
             Btn.MouseButton1Click:Connect(function()
                 PlayAudio("Click")
-                Library:Notify("Action", Text .. " Triggered", 2)
                 Callback()
             end)
             return Btn
         end
+        
+        -- FEEDBACK BOX CREATION (REDESIGNED)
+        function TabData:CreateFeedbackBox()
+            local BoxFrame = Instance.new("Frame", Page)
+            BoxFrame.Size = UDim2.new(1, 0, 0, 125) -- Increased height to fit stylish button
+            BoxFrame.BackgroundColor3 = Theme.Sidebar
+            BoxFrame.BackgroundTransparency = 0.5
+            Instance.new("UICorner", BoxFrame).CornerRadius = UDim.new(0, 10)
+            local S = Instance.new("UIStroke", BoxFrame)
+            S.Color = Theme.Stroke
+            S.Transparency = 0.5
+            
+            local Title = Instance.new("TextLabel", BoxFrame)
+            Title.Text = "  Send Feedback / Bug Report"
+            Title.Size = UDim2.new(1, 0, 0, 25)
+            Title.BackgroundTransparency = 1
+            Title.TextColor3 = Theme.Text
+            Title.Font = Enum.Font.GothamBold
+            Title.TextSize = 13
+            Title.TextXAlignment = Enum.TextXAlignment.Left
+
+            local Input = Instance.new("TextBox", BoxFrame)
+            Input.Size = UDim2.new(1, -20, 0, 30)
+            Input.Position = UDim2.new(0, 10, 0, 30)
+            Input.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+            Input.TextColor3 = Color3.new(1,1,1)
+            Input.PlaceholderText = "Type here..."
+            Input.Font = Enum.Font.Gotham
+            Input.TextSize = 14
+            Instance.new("UICorner", Input).CornerRadius = UDim.new(0, 6)
+
+            -- STYLISH BUTTON CONTAINER
+            local ButtonContainer = Instance.new("Frame", BoxFrame)
+            ButtonContainer.Size = UDim2.new(1, -20, 0, 40)
+            ButtonContainer.Position = UDim2.new(0, 10, 0, 70)
+            ButtonContainer.BackgroundColor3 = Theme.Accent
+            ButtonContainer.BackgroundTransparency = 0.2
+            Instance.new("UICorner", ButtonContainer).CornerRadius = UDim.new(0, 10)
+
+            local Gradient = Instance.new("UIGradient")
+            Gradient.Rotation = 90
+            Gradient.Color = ColorSequence.new{
+                ColorSequenceKeypoint.new(0, Color3.fromRGB(255,255,255)),
+                ColorSequenceKeypoint.new(1, Theme.Accent)
+            }
+            Gradient.Transparency = NumberSequence.new{
+                NumberSequenceKeypoint.new(0, 0.7),
+                NumberSequenceKeypoint.new(1, 0.1)
+            }
+            Gradient.Parent = ButtonContainer
+            
+            local BtnStroke = Instance.new("UIStroke", ButtonContainer)
+            BtnStroke.Color = Color3.fromRGB(255,255,255)
+            BtnStroke.Transparency = 0.6
+            BtnStroke.Thickness = 1
+
+            local SendBtn = Instance.new("TextButton", ButtonContainer)
+            SendBtn.Size = UDim2.new(1, 0, 1, 0)
+            SendBtn.BackgroundTransparency = 1
+            SendBtn.Text = "Send Feedback"
+            SendBtn.TextColor3 = Color3.fromRGB(255,255,255)
+            SendBtn.Font = Enum.Font.GothamBold
+            SendBtn.TextSize = 14
+            
+            SendBtn.MouseEnter:Connect(function() PlayAudio("Hover") end)
+
+            SendBtn.MouseButton1Click:Connect(function()
+                if Input.Text == "" then
+                    Library:Notify("Error", "Message cannot be empty.", 2)
+                    return
+                end
+
+                if not FeedbackWarningAccepted then
+                    Library:ShowFeedbackWarning(function()
+                        PlayAudio("Click")
+                        SendToDiscord(Input.Text)
+                        Library:Notify("Sent", "Feedback sent successfully!", 2)
+                        Input.Text = ""
+                    end)
+                    return
+                end
+
+                PlayAudio("Click")
+                SendToDiscord(Input.Text)
+                Library:Notify("Sent", "Feedback sent successfully!", 2)
+                Input.Text = ""
+            end)
+        end
+        
         return TabData
     end
     return Tabs
@@ -1036,6 +1436,19 @@ end
 
 --// INIT
 local Window = Library:Init()
+
+-- General Tab
+local GeneralTab = Window:CreateTab("General", "ℹ️")
+GeneralTab:CreateButton("Copy Profile Link", function()
+    setclipboard(ProfileLink)
+    Library:Notify("Success", "Profile link copied!", 3)
+end)
+GeneralTab:CreateButton("Copy Gamepass Link", function()
+    setclipboard(GamepassLink)
+    Library:Notify("Success", "Gamepass link copied!", 3)
+end)
+GeneralTab:CreateFeedbackBox()
+
 local MainTab = Window:CreateTab("Main", "🏠")
 
 MainTab:CreateToggle("Enable WalkSpeed", function(val) WalkSpeedEnabled = val end, false)
@@ -1069,6 +1482,7 @@ TeleportTab:CreateButton("Teleport to Elevator", function()
             end
         end
     end)
+    Library:Notify("Action", "Teleporting...", 2)
 end)
 
 TeleportTab:CreateToggle("Auto TP Elevator", function(val)
@@ -1112,6 +1526,7 @@ TeleportTab:CreateButton("TP to Uncompleted Machine", function()
             end
         end
     end)
+    Library:Notify("Action", "Teleporting...", 2)
 end)
 
 local FarmingTab = Window:CreateTab("Farming", "🎒")
@@ -1179,11 +1594,21 @@ FarmingTab:CreateButton("Auto Collect Research", function()
     AutoCollectItem("Research")
 end)
 
+local PremiumTab = Window:CreateTab("Premium", "💎")
+PremiumTab:CreateToggle("Infinite Stamina", function(val)
+    InfiniteStaminaEnabled = val
+end, false)
+
 local StuffTab = Window:CreateTab("Stuff", "⚙️")
 StuffTab:CreateButton("Force Reset", function()
     if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
         LocalPlayer.Character.Humanoid.Health = 0
     end
+    Library:Notify("Action", "Resetting...", 2)
+end)
+
+StuffTab:CreateButton("Infinite Yield", function()
+    loadstring(game:HttpGet('https://raw.githubusercontent.com/DarkNetworks/Infinite-Yield/main/latest.lua'))()
 end)
 
 StuffTab:CreateToggle("Fullbright", function(val)
@@ -1223,4 +1648,4 @@ KeybindButton = SettingsTab:CreateButton("Menu Keybind: LeftControl", function()
     end)
 end)
 
-print("Poorly Scripted v6.7 - Perfected Health ESP")
+print("Poorly Scripted v8.0 - Final UI Polish & IY Added")
