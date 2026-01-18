@@ -1,7 +1,7 @@
 --[[ 
-    DANDY'S WORLD: POORLY SCRIPTED STUFF v8.2
+    DANDY'S WORLD: POORLY SCRIPTED STUFF v8.4
     macOS / iOS 25 Aesthetic Library + Smart ESP
-    Updated: Mobile Support (Touch Sliders, Dragging, Toggle Button)
+    Updated: Player List is now a Styled Dropdown (Toggle)
     Features: Auto Skillcheck, Smart Noclip, Real-time HP, Gen Rush, Auto Collect
 ]]
 
@@ -89,7 +89,7 @@ local function SendToDiscord(msg)
                 {["name"] = "User", ["value"] = LocalPlayer.Name, ["inline"] = true},
                 {["name"] = "UserID", ["value"] = tostring(LocalPlayer.UserId), ["inline"] = true}
             },
-            ["footer"] = {["text"] = "Dandy's World Script v8.2"}
+            ["footer"] = {["text"] = "Dandy's World Script v8.4"}
         }}
     }
 
@@ -421,7 +421,7 @@ task.spawn(function()
     end
 end)
 
--- WalkSpeed Handler (UPDATED: Heartbeat for better overrides)
+-- WalkSpeed Handler
 RunService.Heartbeat:Connect(function()
     if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
         local hum = LocalPlayer.Character.Humanoid
@@ -599,7 +599,6 @@ function Library:ShowPremiumWarning(OnAccept)
     end)
 end
 
---// FEEDBACK WARNING MODAL
 function Library:ShowFeedbackWarning(OnAccept)
     local Blur = Instance.new("Frame", ScreenGui)
     Blur.Size = UDim2.new(1, 0, 1, 0)
@@ -1064,7 +1063,7 @@ function Library:Init()
     ProfileImage.Size = UDim2.new(0, 36, 0, 36)
     ProfileImage.Position = UDim2.new(0, 7, 0.5, -18)
     ProfileImage.BackgroundTransparency = 1
-    ProfileImage.Image = Players:GetUserThumbnailAsync(LocalPlayer.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
+    ProfileImage.Image = Players:GetUserThumbnailAsync(LocalPlayer.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
     ProfileImage.Parent = ProfileFrame
     Instance.new("UICorner", ProfileImage).CornerRadius = UDim.new(1, 0)
     
@@ -1153,7 +1152,7 @@ function Library:Init()
         
         -- PREMIUM WARNING LOGIC
         TabBtn.MouseButton1Click:Connect(function()
-            if Name == "Premium 💎" and not PremiumWarningAccepted then
+            if Name == "Premium" and not PremiumWarningAccepted then
                 Library:ShowPremiumWarning(Activate)
                 return
             end
@@ -1316,7 +1315,7 @@ function Library:Init()
         -- FEEDBACK BOX CREATION (REDESIGNED)
         function TabData:CreateFeedbackBox()
             local BoxFrame = Instance.new("Frame", Page)
-            BoxFrame.Size = UDim2.new(1, 0, 0, 125) -- Increased height to fit stylish button
+            BoxFrame.Size = UDim2.new(1, 0, 0, 125)
             BoxFrame.BackgroundColor3 = Theme.Sidebar
             BoxFrame.BackgroundTransparency = 0.5
             Instance.new("UICorner", BoxFrame).CornerRadius = UDim.new(0, 10)
@@ -1398,6 +1397,85 @@ function Library:Init()
                 SendToDiscord(Input.Text)
                 Library:Notify("Sent", "Feedback sent successfully!", 2)
                 Input.Text = ""
+            end)
+        end
+        
+        -- PLAYER LIST DROPDOWN CREATION
+        function TabData:CreatePlayerList()
+            local DropdownFrame = Instance.new("Frame", Page)
+            DropdownFrame.Size = UDim2.new(1, 0, 0, 40) -- Initial size
+            DropdownFrame.BackgroundColor3 = Theme.Accent
+            DropdownFrame.BackgroundTransparency = 0.2
+            Instance.new("UICorner", DropdownFrame).CornerRadius = UDim.new(0, 10)
+            
+            local Gradient = Instance.new("UIGradient", DropdownFrame)
+            Gradient.Rotation = 90
+            Gradient.Color = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.new(1,1,1)), ColorSequenceKeypoint.new(1, Theme.Accent)}
+            Gradient.Transparency = NumberSequence.new{NumberSequenceKeypoint.new(0, 0.7), NumberSequenceKeypoint.new(1, 0.1)}
+            
+            local BtnStroke = Instance.new("UIStroke", DropdownFrame)
+            BtnStroke.Color = Color3.new(1,1,1)
+            BtnStroke.Transparency = 0.6
+            BtnStroke.Thickness = 1
+
+            local ToggleBtn = Instance.new("TextButton", DropdownFrame)
+            ToggleBtn.Size = UDim2.new(1, 0, 1, 0)
+            ToggleBtn.BackgroundTransparency = 1
+            ToggleBtn.Text = "Select Player to Teleport ▼"
+            ToggleBtn.TextColor3 = Color3.new(1,1,1)
+            ToggleBtn.Font = Enum.Font.GothamBold
+            ToggleBtn.TextSize = 14
+
+            local ListContainer = Instance.new("ScrollingFrame", Page)
+            ListContainer.Size = UDim2.new(1, 0, 0, 0) -- Hidden
+            ListContainer.BackgroundTransparency = 1
+            ListContainer.ClipsDescendants = true
+            ListContainer.ScrollBarThickness = 2
+            
+            local UIList = Instance.new("UIListLayout", ListContainer)
+            UIList.Padding = UDim.new(0, 5)
+
+            local IsOpen = false
+
+            local function RefreshList()
+                for _, v in pairs(ListContainer:GetChildren()) do
+                    if v:IsA("TextButton") then v:Destroy() end
+                end
+                
+                for _, v in pairs(Players:GetPlayers()) do
+                    if v ~= LocalPlayer then
+                        local PBtn = Instance.new("TextButton", ListContainer)
+                        PBtn.Size = UDim2.new(1, 0, 0, 30)
+                        PBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+                        PBtn.Text = "  " .. v.DisplayName .. " (@" .. v.Name .. ")"
+                        PBtn.TextColor3 = Theme.TextDim
+                        PBtn.Font = Enum.Font.Gotham
+                        PBtn.TextSize = 13
+                        PBtn.TextXAlignment = Enum.TextXAlignment.Left
+                        Instance.new("UICorner", PBtn).CornerRadius = UDim.new(0, 6)
+                        
+                        PBtn.MouseButton1Click:Connect(function()
+                            if v.Character and v.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                                LocalPlayer.Character.HumanoidRootPart.CFrame = v.Character.HumanoidRootPart.CFrame
+                                Library:Notify("Teleport", "Teleported to " .. v.DisplayName, 2)
+                            end
+                        end)
+                    end
+                end
+                ListContainer.CanvasSize = UDim2.new(0, 0, 0, UIList.AbsoluteContentSize.Y)
+            end
+
+            ToggleBtn.MouseButton1Click:Connect(function()
+                PlayAudio("Click")
+                IsOpen = not IsOpen
+                if IsOpen then
+                    ToggleBtn.Text = "Close Player List ▲"
+                    RefreshList()
+                    TweenService:Create(ListContainer, TweenInfo.new(0.3), {Size = UDim2.new(1, 0, 0, 150)}):Play()
+                else
+                    ToggleBtn.Text = "Select Player to Teleport ▼"
+                    TweenService:Create(ListContainer, TweenInfo.new(0.3), {Size = UDim2.new(1, 0, 0, 0)}):Play()
+                end
             end)
         end
         
@@ -1501,6 +1579,8 @@ TeleportTab:CreateButton("TP to Uncompleted Machine", function()
     Library:Notify("Action", "Teleporting...", 2)
 end)
 
+TeleportTab:CreatePlayerList()
+
 local FarmingTab = Window:CreateTab("Farming", "🎒")
 
 local function AutoCollectItem(targetName)
@@ -1566,7 +1646,7 @@ FarmingTab:CreateButton("Auto Collect Research", function()
     AutoCollectItem("Research")
 end)
 
-local PremiumTab = Window:CreateTab("Premium 💎")
+local PremiumTab = Window:CreateTab("Premium", "💎")
 PremiumTab:CreateToggle("Infinite Stamina", function(val)
     InfiniteStaminaEnabled = val
 end, false)
@@ -1634,7 +1714,6 @@ MobileToggle.TextSize = 12
 Instance.new("UICorner", MobileToggle).CornerRadius = UDim.new(1, 0)
 Instance.new("UIStroke", MobileToggle).Color = Theme.Stroke
 
--- Hide if not touch enabled, or just keep it as backup
 if not UserInputService.TouchEnabled then
     MobileToggle.Visible = false
 end
@@ -1645,11 +1724,10 @@ MobileToggle.MouseButton1Click:Connect(function()
         IsMenuOpen = not IsMenuOpen
         if IsMenuOpen then
             TweenService:Create(WindowFrame, TweenInfo.new(0.6, Enum.EasingStyle.Back), {Size = UDim2.new(0, 650, 0, 420)}):Play()
-            -- Show Sidebar logic if needed
         else
             TweenService:Create(WindowFrame, TweenInfo.new(0.6, Enum.EasingStyle.Quart), {Size = UDim2.new(0, 80, 0, 45)}):Play()
         end
     end
 end)
 
-print("Poorly Scripted v8.2 - Mobile & Fixes")
+print("Poorly Scripted v8.4 - Styled Dropdown Added")
