@@ -1,7 +1,7 @@
 --[[ 
-    DANDY'S WORLD: POORLY SCRIPTED STUFF v8.1
+    DANDY'S WORLD: POORLY SCRIPTED STUFF v8.2
     macOS / iOS 25 Aesthetic Library + Smart ESP
-    Updated: Premium Tab Icon Fixed & Infinite Yield Renamed
+    Updated: Mobile Support (Touch Sliders, Dragging, Toggle Button)
     Features: Auto Skillcheck, Smart Noclip, Real-time HP, Gen Rush, Auto Collect
 ]]
 
@@ -25,8 +25,6 @@ local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 local PremiumGamepassID = 1673720090
 local ProfileLink = "https://www.roblox.com/users/8816493943/profile"
 local GamepassLink = "https://www.roblox.com/game-pass/" .. PremiumGamepassID
-
--- [!] WEBHOOK CONFIGURED [!]
 local DiscordWebhook = "https://webhook.lewisakura.moe/api/webhooks/1462372383842107667/CiJJUsgEdtDXc6U1APFiBoG9aBOlIITZ8cI2Qv-A2RpQdE-sWQSmo67puO5jZYRLAzNg" 
 
 --// THEME CONFIGURATION
@@ -79,7 +77,6 @@ end
 --// WEBHOOK FUNCTION
 local function SendToDiscord(msg)
     if DiscordWebhook == "" then return end
-    
     local httpRequest = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
     if not httpRequest then return end
 
@@ -92,7 +89,7 @@ local function SendToDiscord(msg)
                 {["name"] = "User", ["value"] = LocalPlayer.Name, ["inline"] = true},
                 {["name"] = "UserID", ["value"] = tostring(LocalPlayer.UserId), ["inline"] = true}
             },
-            ["footer"] = {["text"] = "Dandy's World Script v8.1"}
+            ["footer"] = {["text"] = "Dandy's World Script v8.2"}
         }}
     }
 
@@ -115,7 +112,7 @@ end
 
 --// FEATURE SETTINGS
 local ESP_Settings = {
-    Players = {Enabled = false, Color = Color3.fromRGB(170, 0, 255)}, -- Purple
+    Players = {Enabled = false, Color = Color3.fromRGB(170, 0, 255)},
     Twisteds = {Enabled = false, Color = Color3.fromRGB(255, 50, 50)},
     Generators = {Enabled = false, Color = Color3.fromRGB(255, 255, 255)},
     Items = {Enabled = false, Color = Color3.fromRGB(0, 200, 255)},
@@ -146,16 +143,13 @@ local function GetHeartsFromModel(model)
     if hp == nil then return "..." end 
 
     local hearts = ""
-    for i = 1, hp do
-        hearts = hearts .. "❤"
-    end
+    for i = 1, hp do hearts = hearts .. "❤" end
     if hp <= 0 then hearts = "☠️" end
     return hearts
 end
 
 local function CreateHighlight(model, color, name, isPlayer, showBillboard)
     if not model then return end
-    
     local existingBillboard = model:FindFirstChild("DW_ESP_Text")
     
     if existingBillboard and isPlayer then
@@ -187,20 +181,17 @@ local function CreateHighlight(model, color, name, isPlayer, showBillboard)
         local text = Instance.new("TextLabel")
         text.Size = UDim2.new(1, 0, 1, 0)
         text.BackgroundTransparency = 1
-        
         if isPlayer then
             text.Text = model.Name .. "\n" .. GetHeartsFromModel(model)
         else
             text.Text = name
         end
-        
         text.TextColor3 = color
         text.TextStrokeTransparency = 0
         text.Font = Enum.Font.GothamBold
         text.TextSize = 13
         text.Parent = billboard
     end
-
     table.insert(ESP_Storage, {Instance = highlight, Billboard = billboard, Parent = model, Type = name, IsPlayer = isPlayer})
 end
 
@@ -208,7 +199,6 @@ local function RefreshESP()
     for i = #ESP_Storage, 1, -1 do
         local data = ESP_Storage[i]
         local shouldExist = false
-        
         if data.Type == "Generator" and ESP_Settings.Generators.Enabled then shouldExist = true
         elseif data.IsPlayer and ESP_Settings.Players.Enabled then shouldExist = true
         elseif ESP_Settings.Twisteds.Enabled and data.Type == "Twisted" then shouldExist = true
@@ -249,7 +239,6 @@ local function RefreshESP()
                     end
                 end
             end
-            
             if ESP_Settings.Generators.Enabled then
                 local genFolder = roomModel:FindFirstChild("Generators")
                 if genFolder then
@@ -271,7 +260,6 @@ local function RefreshESP()
                     end
                 end
             end
-
             if ESP_Settings.Items.Enabled then
                 local itemFolder = roomModel:FindFirstChild("Items")
                 if itemFolder then
@@ -297,10 +285,7 @@ task.spawn(function()
                     if myData and myData:FindFirstChild("Stats") then
                         local current = myData.Stats:FindFirstChild("CurrentStamina")
                         local original = myData.Stats:FindFirstChild("OriginalStamina")
-                        
-                        if current and original then
-                            current.Value = original.Value
-                        end
+                        if current and original then current.Value = original.Value end
                     end
                 end
             end)
@@ -436,19 +421,13 @@ task.spawn(function()
     end
 end)
 
--- WalkSpeed Handler
-task.spawn(function()
-    while task.wait() do
-        pcall(function()
-            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-                local hum = LocalPlayer.Character.Humanoid
-                if WalkSpeedEnabled then
-                    if hum.WalkSpeed < WalkSpeedValue then hum.WalkSpeed = WalkSpeedValue end
-                else
-                    if hum.WalkSpeed == WalkSpeedValue then hum.WalkSpeed = 16 end
-                end
-            end
-        end)
+-- WalkSpeed Handler (UPDATED: Heartbeat for better overrides)
+RunService.Heartbeat:Connect(function()
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        local hum = LocalPlayer.Character.Humanoid
+        if WalkSpeedEnabled then
+            if hum.WalkSpeed < WalkSpeedValue then hum.WalkSpeed = WalkSpeedValue end
+        end
     end
 end)
 
@@ -460,7 +439,6 @@ local ScreenGui
 function Library:Notify(Title, Text, Duration)
     PlayAudio("Notify")
     if not NotificationHolder then return end
-    
     local NotifyFrame = Instance.new("Frame")
     NotifyFrame.Size = UDim2.new(1, 0, 0, 0)
     NotifyFrame.BackgroundColor3 = Theme.Sidebar
@@ -468,16 +446,13 @@ function Library:Notify(Title, Text, Duration)
     NotifyFrame.BorderSizePixel = 0
     NotifyFrame.ClipsDescendants = true
     NotifyFrame.Parent = NotificationHolder
-    
     local Stroke = Instance.new("UIStroke")
     Stroke.Color = Theme.Stroke
     Stroke.Thickness = 1
     Stroke.Parent = NotifyFrame
-    
     local Corner = Instance.new("UICorner")
     Corner.CornerRadius = UDim.new(0, 8)
     Corner.Parent = NotifyFrame
-    
     local TitleLabel = Instance.new("TextLabel")
     TitleLabel.Text = Title
     TitleLabel.Font = Enum.Font.GothamBold
@@ -488,7 +463,6 @@ function Library:Notify(Title, Text, Duration)
     TitleLabel.Position = UDim2.new(0, 10, 0, 5)
     TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
     TitleLabel.Parent = NotifyFrame
-    
     local DescLabel = Instance.new("TextLabel")
     DescLabel.Text = Text
     DescLabel.Font = Enum.Font.Gotham
@@ -500,9 +474,7 @@ function Library:Notify(Title, Text, Duration)
     DescLabel.TextXAlignment = Enum.TextXAlignment.Left
     DescLabel.TextWrapped = true
     DescLabel.Parent = NotifyFrame
-    
     NotifyFrame:TweenSize(UDim2.new(1, 0, 0, 60), Enum.EasingDirection.Out, Enum.EasingStyle.Quart, 0.3, true)
-    
     task.delay(Duration or 3, function()
         NotifyFrame:TweenSize(UDim2.new(1, 0, 0, 0), Enum.EasingDirection.In, Enum.EasingStyle.Quart, 0.3, true, function()
             NotifyFrame:Destroy()
@@ -886,17 +858,17 @@ function Library:Init()
 
     local Dragging, DragInput, DragStart, StartPos
     DragZone.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             Dragging = true
             DragStart = input.Position
             StartPos = MainFrame.Position
         end
     end)
     DragZone.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then Dragging = false end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then Dragging = false end
     end)
     UserInputService.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement then DragInput = input end
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then DragInput = input end
     end)
     RunService.RenderStepped:Connect(function()
         if Dragging and DragInput then
@@ -1092,7 +1064,7 @@ function Library:Init()
     ProfileImage.Size = UDim2.new(0, 36, 0, 36)
     ProfileImage.Position = UDim2.new(0, 7, 0.5, -18)
     ProfileImage.BackgroundTransparency = 1
-    ProfileImage.Image = Players:GetUserThumbnailAsync(LocalPlayer.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
+    ProfileImage.Image = Players:GetUserThumbnailAsync(LocalPlayer.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
     ProfileImage.Parent = ProfileFrame
     Instance.new("UICorner", ProfileImage).CornerRadius = UDim.new(1, 0)
     
@@ -1181,7 +1153,7 @@ function Library:Init()
         
         -- PREMIUM WARNING LOGIC
         TabBtn.MouseButton1Click:Connect(function()
-            if Name == "Premium" and not PremiumWarningAccepted then
+            if Name == "Premium 💎" and not PremiumWarningAccepted then
                 Library:ShowPremiumWarning(Activate)
                 return
             end
@@ -1289,13 +1261,13 @@ function Library:Init()
             end
 
             SliderBar.InputBegan:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
                     UpdateSlider(input)
                     local Connection; Connection = UserInputService.InputChanged:Connect(function(input)
-                        if input.UserInputType == Enum.UserInputType.MouseMovement then UpdateSlider(input) end
+                        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then UpdateSlider(input) end
                     end)
                     UserInputService.InputEnded:Connect(function(input)
-                        if input.UserInputType == Enum.UserInputType.MouseButton1 then Connection:Disconnect() end
+                        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then Connection:Disconnect() end
                     end)
                 end
             end)
@@ -1594,7 +1566,7 @@ FarmingTab:CreateButton("Auto Collect Research", function()
     AutoCollectItem("Research")
 end)
 
-local PremiumTab = Window:CreateTab("Premium", "💎")
+local PremiumTab = Window:CreateTab("Premium 💎")
 PremiumTab:CreateToggle("Infinite Stamina", function(val)
     InfiniteStaminaEnabled = val
 end, false)
@@ -1648,4 +1620,36 @@ KeybindButton = SettingsTab:CreateButton("Menu Keybind: LeftControl", function()
     end)
 end)
 
-print("Poorly Scripted v8.0 - Final UI Polish & IY Added")
+--// MOBILE TOGGLE BUTTON (FIX)
+local MobileToggle = Instance.new("TextButton", ScreenGui)
+MobileToggle.Name = "MobileToggle"
+MobileToggle.Size = UDim2.new(0, 50, 0, 50)
+MobileToggle.Position = UDim2.new(1, -70, 1, -70)
+MobileToggle.BackgroundColor3 = Theme.Accent
+MobileToggle.BackgroundTransparency = 0.3
+MobileToggle.Text = "MENU"
+MobileToggle.TextColor3 = Theme.Text
+MobileToggle.Font = Enum.Font.GothamBold
+MobileToggle.TextSize = 12
+Instance.new("UICorner", MobileToggle).CornerRadius = UDim.new(1, 0)
+Instance.new("UIStroke", MobileToggle).Color = Theme.Stroke
+
+-- Hide if not touch enabled, or just keep it as backup
+if not UserInputService.TouchEnabled then
+    MobileToggle.Visible = false
+end
+
+MobileToggle.MouseButton1Click:Connect(function()
+    local WindowFrame = ScreenGui:FindFirstChild("Window")
+    if WindowFrame then
+        IsMenuOpen = not IsMenuOpen
+        if IsMenuOpen then
+            TweenService:Create(WindowFrame, TweenInfo.new(0.6, Enum.EasingStyle.Back), {Size = UDim2.new(0, 650, 0, 420)}):Play()
+            -- Show Sidebar logic if needed
+        else
+            TweenService:Create(WindowFrame, TweenInfo.new(0.6, Enum.EasingStyle.Quart), {Size = UDim2.new(0, 80, 0, 45)}):Play()
+        end
+    end
+end)
+
+print("Poorly Scripted v8.2 - Mobile & Fixes")
