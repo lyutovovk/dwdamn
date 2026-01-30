@@ -1,7 +1,7 @@
 --[[ 
-    DANDY'S WORLD: POORLY SCRIPTED STUFF v8.4
+    DANDY'S WORLD: POORLY SCRIPTED STUFF v8.9
     macOS / iOS 25 Aesthetic Library + Smart ESP
-    Updated: Player List is now a Styled Dropdown (Toggle)
+    Updated: "Copy Durrnity Link" added to ALL Tabs
     Features: Auto Skillcheck, Smart Noclip, Real-time HP, Gen Rush, Auto Collect
 ]]
 
@@ -20,11 +20,13 @@ local HttpService = game:GetService("HttpService")
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local Camera = Workspace.CurrentCamera
 
 --// CONFIGURATION
 local PremiumGamepassID = 1673720090
 local ProfileLink = "https://www.roblox.com/users/8816493943/profile"
 local GamepassLink = "https://www.roblox.com/game-pass/" .. PremiumGamepassID
+local DurrnityLink = "https://www.roblox.com/games/87950776737659/durrnity"
 local DiscordWebhook = "https://webhook.lewisakura.moe/api/webhooks/1462372383842107667/CiJJUsgEdtDXc6U1APFiBoG9aBOlIITZ8cI2Qv-A2RpQdE-sWQSmo67puO5jZYRLAzNg" 
 
 --// THEME CONFIGURATION
@@ -89,7 +91,7 @@ local function SendToDiscord(msg)
                 {["name"] = "User", ["value"] = LocalPlayer.Name, ["inline"] = true},
                 {["name"] = "UserID", ["value"] = tostring(LocalPlayer.UserId), ["inline"] = true}
             },
-            ["footer"] = {["text"] = "Dandy's World Script v8.4"}
+            ["footer"] = {["text"] = "Dandy's World Script v8.9"}
         }}
     }
 
@@ -110,6 +112,155 @@ local function CheckPremium()
     return false 
 end
 
+--// GUI LIBRARY VARIABLES
+local Library = {}
+local NotificationHolder
+local ScreenGui 
+local IsMenuOpen = true 
+local IsSettingKeybind = false 
+local ToggleKey = Enum.KeyCode.LeftControl 
+local PremiumWarningAccepted = false 
+local FeedbackWarningAccepted = false 
+
+function Library:Notify(Title, Text, Duration)
+    PlayAudio("Notify")
+    if not NotificationHolder then return end
+    local NotifyFrame = Instance.new("Frame")
+    NotifyFrame.Size = UDim2.new(1, 0, 0, 0)
+    NotifyFrame.BackgroundColor3 = Theme.Sidebar
+    NotifyFrame.BackgroundTransparency = 0.1
+    NotifyFrame.BorderSizePixel = 0
+    NotifyFrame.ClipsDescendants = true
+    NotifyFrame.Parent = NotificationHolder
+    local Stroke = Instance.new("UIStroke")
+    Stroke.Color = Theme.Stroke
+    Stroke.Thickness = 1
+    Stroke.Parent = NotifyFrame
+    local Corner = Instance.new("UICorner")
+    Corner.CornerRadius = UDim.new(0, 8)
+    Corner.Parent = NotifyFrame
+    local TitleLabel = Instance.new("TextLabel")
+    TitleLabel.Text = Title
+    TitleLabel.Font = Enum.Font.GothamBold
+    TitleLabel.TextSize = 14
+    TitleLabel.TextColor3 = Theme.Accent
+    TitleLabel.BackgroundTransparency = 1
+    TitleLabel.Size = UDim2.new(1, -20, 0, 20)
+    TitleLabel.Position = UDim2.new(0, 10, 0, 5)
+    TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    TitleLabel.Parent = NotifyFrame
+    local DescLabel = Instance.new("TextLabel")
+    DescLabel.Text = Text
+    DescLabel.Font = Enum.Font.Gotham
+    DescLabel.TextSize = 12
+    DescLabel.TextColor3 = Theme.Text
+    DescLabel.BackgroundTransparency = 1
+    DescLabel.Size = UDim2.new(1, -20, 0, 30)
+    DescLabel.Position = UDim2.new(0, 10, 0, 22)
+    DescLabel.TextXAlignment = Enum.TextXAlignment.Left
+    DescLabel.TextWrapped = true
+    DescLabel.Parent = NotifyFrame
+    NotifyFrame:TweenSize(UDim2.new(1, 0, 0, 60), Enum.EasingDirection.Out, Enum.EasingStyle.Quart, 0.3, true)
+    task.delay(Duration or 3, function()
+        NotifyFrame:TweenSize(UDim2.new(1, 0, 0, 0), Enum.EasingDirection.In, Enum.EasingStyle.Quart, 0.3, true, function()
+            NotifyFrame:Destroy()
+        end)
+    end)
+end
+
+--// FREECAM LOGIC
+local FreecamEnabled = false
+local FreecamSpeed = 1
+local FreecamState = {
+    Position = Vector3.new(),
+    Angles = Vector2.new()
+}
+local InputState = {
+    W = false, A = false, S = false, D = false, Q = false, E = false, Shift = false
+}
+
+local function UpdateFreecam(dt)
+    if not FreecamEnabled then return end
+    
+    local delta = UserInputService:GetMouseDelta()
+    if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter or UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) or UserInputService.TouchEnabled then
+        FreecamState.Angles = FreecamState.Angles - Vector2.new(delta.Y, delta.X) * 0.005
+    end
+    
+    local pitch = math.clamp(FreecamState.Angles.X, -math.pi/2, math.pi/2)
+    local yaw = FreecamState.Angles.Y
+    local rotation = CFrame.fromEulerAnglesYXZ(pitch, yaw, 0)
+    
+    local moveVector = Vector3.new()
+    if InputState.W then moveVector = moveVector + Vector3.new(0, 0, -1) end
+    if InputState.S then moveVector = moveVector + Vector3.new(0, 0, 1) end
+    if InputState.A then moveVector = moveVector + Vector3.new(-1, 0, 0) end
+    if InputState.D then moveVector = moveVector + Vector3.new(1, 0, 0) end
+    if InputState.Q then moveVector = moveVector + Vector3.new(0, -1, 0) end
+    if InputState.E then moveVector = moveVector + Vector3.new(0, 1, 0) end
+    
+    local speedMultiplier = InputState.Shift and 3 or 1
+    local adjustedSpeed = FreecamSpeed * speedMultiplier * (dt * 60)
+    
+    if moveVector.Magnitude > 0 then
+        moveVector = moveVector.Unit * adjustedSpeed
+        FreecamState.Position = FreecamState.Position + (rotation * moveVector)
+    end
+    
+    Camera.CFrame = CFrame.new(FreecamState.Position) * rotation
+    
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        LocalPlayer.Character.HumanoidRootPart.Anchored = true
+        LocalPlayer.Character.HumanoidRootPart.Velocity = Vector3.new(0,0,0)
+    end
+end
+
+local function ToggleFreecamLogic(val)
+    FreecamEnabled = val
+    if val then
+        Camera.CameraType = Enum.CameraType.Scriptable
+        FreecamState.Position = Camera.CFrame.Position
+        local x, y, z = Camera.CFrame:ToEulerAnglesYXZ()
+        FreecamState.Angles = Vector2.new(x, y)
+        RunService:BindToRenderStep("DW_Freecam", Enum.RenderPriority.Camera.Value + 1, UpdateFreecam)
+        UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+        Library:Notify("Freecam", "Enabled (Press H to toggle)", 2)
+    else
+        RunService:UnbindFromRenderStep("DW_Freecam")
+        Camera.CameraType = Enum.CameraType.Custom
+        UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            LocalPlayer.Character.HumanoidRootPart.Anchored = false
+        end
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            Camera.CameraSubject = LocalPlayer.Character.Humanoid
+        end
+        Library:Notify("Freecam", "Disabled", 2)
+    end
+end
+
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == Enum.KeyCode.H then ToggleFreecamLogic(not FreecamEnabled) end
+    if input.KeyCode == Enum.KeyCode.W then InputState.W = true end
+    if input.KeyCode == Enum.KeyCode.A then InputState.A = true end
+    if input.KeyCode == Enum.KeyCode.S then InputState.S = true end
+    if input.KeyCode == Enum.KeyCode.D then InputState.D = true end
+    if input.KeyCode == Enum.KeyCode.Q then InputState.Q = true end
+    if input.KeyCode == Enum.KeyCode.E then InputState.E = true end
+    if input.KeyCode == Enum.KeyCode.LeftShift then InputState.Shift = true end
+end)
+
+UserInputService.InputEnded:Connect(function(input, gpe)
+    if input.KeyCode == Enum.KeyCode.W then InputState.W = false end
+    if input.KeyCode == Enum.KeyCode.A then InputState.A = false end
+    if input.KeyCode == Enum.KeyCode.S then InputState.S = false end
+    if input.KeyCode == Enum.KeyCode.D then InputState.D = false end
+    if input.KeyCode == Enum.KeyCode.Q then InputState.Q = false end
+    if input.KeyCode == Enum.KeyCode.E then InputState.E = false end
+    if input.KeyCode == Enum.KeyCode.LeftShift then InputState.Shift = false end
+end)
+
 --// FEATURE SETTINGS
 local ESP_Settings = {
     Players = {Enabled = false, Color = Color3.fromRGB(170, 0, 255)},
@@ -124,15 +275,9 @@ local NoclipEnabled = false
 local AutoSkillCheckEnabled = false
 local AutoEscapeEnabled = false 
 local InfiniteStaminaEnabled = false
+local GodModeEnabled = false 
 local NoclipConnection = nil
 local ESP_Storage = {} 
-
--- Global Keybind Variables
-local ToggleKey = Enum.KeyCode.LeftControl 
-local IsMenuOpen = true 
-local IsSettingKeybind = false 
-local PremiumWarningAccepted = false 
-local FeedbackWarningAccepted = false 
 
 --// UTILITY: FUNCTIONS
 local function GetHeartsFromModel(model)
@@ -293,6 +438,19 @@ task.spawn(function()
     end
 end)
 
+--// PREMIUM: GOD MODE LOGIC
+task.spawn(function()
+    while task.wait(0.5) do
+        if GodModeEnabled and LocalPlayer.Character then
+            for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanTouch = false 
+                end
+            end
+        end
+    end
+end)
+
 --// SMART NOCLIP
 local function ModifyPartCollision(part, noclipActive)
     if not part:IsA("BasePart") then return end
@@ -430,57 +588,6 @@ RunService.Heartbeat:Connect(function()
         end
     end
 end)
-
---// GUI LIBRARY
-local Library = {}
-local NotificationHolder
-local ScreenGui 
-
-function Library:Notify(Title, Text, Duration)
-    PlayAudio("Notify")
-    if not NotificationHolder then return end
-    local NotifyFrame = Instance.new("Frame")
-    NotifyFrame.Size = UDim2.new(1, 0, 0, 0)
-    NotifyFrame.BackgroundColor3 = Theme.Sidebar
-    NotifyFrame.BackgroundTransparency = 0.1
-    NotifyFrame.BorderSizePixel = 0
-    NotifyFrame.ClipsDescendants = true
-    NotifyFrame.Parent = NotificationHolder
-    local Stroke = Instance.new("UIStroke")
-    Stroke.Color = Theme.Stroke
-    Stroke.Thickness = 1
-    Stroke.Parent = NotifyFrame
-    local Corner = Instance.new("UICorner")
-    Corner.CornerRadius = UDim.new(0, 8)
-    Corner.Parent = NotifyFrame
-    local TitleLabel = Instance.new("TextLabel")
-    TitleLabel.Text = Title
-    TitleLabel.Font = Enum.Font.GothamBold
-    TitleLabel.TextSize = 14
-    TitleLabel.TextColor3 = Theme.Accent
-    TitleLabel.BackgroundTransparency = 1
-    TitleLabel.Size = UDim2.new(1, -20, 0, 20)
-    TitleLabel.Position = UDim2.new(0, 10, 0, 5)
-    TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
-    TitleLabel.Parent = NotifyFrame
-    local DescLabel = Instance.new("TextLabel")
-    DescLabel.Text = Text
-    DescLabel.Font = Enum.Font.Gotham
-    DescLabel.TextSize = 12
-    DescLabel.TextColor3 = Theme.Text
-    DescLabel.BackgroundTransparency = 1
-    DescLabel.Size = UDim2.new(1, -20, 0, 30)
-    DescLabel.Position = UDim2.new(0, 10, 0, 22)
-    DescLabel.TextXAlignment = Enum.TextXAlignment.Left
-    DescLabel.TextWrapped = true
-    DescLabel.Parent = NotifyFrame
-    NotifyFrame:TweenSize(UDim2.new(1, 0, 0, 60), Enum.EasingDirection.Out, Enum.EasingStyle.Quart, 0.3, true)
-    task.delay(Duration or 3, function()
-        NotifyFrame:TweenSize(UDim2.new(1, 0, 0, 0), Enum.EasingDirection.In, Enum.EasingStyle.Quart, 0.3, true, function()
-            NotifyFrame:Destroy()
-        end)
-    end)
-end
 
 --// WARNING MODALS
 function Library:ShowPremiumWarning(OnAccept)
@@ -1152,7 +1259,7 @@ function Library:Init()
         
         -- PREMIUM WARNING LOGIC
         TabBtn.MouseButton1Click:Connect(function()
-            if Name == "Premium" and not PremiumWarningAccepted then
+            if Name == "Premium 💎" and not PremiumWarningAccepted then
                 Library:ShowPremiumWarning(Activate)
                 return
             end
@@ -1200,7 +1307,7 @@ function Library:Init()
             Trigger.MouseEnter:Connect(function() PlayAudio("Hover") end)
 
             Trigger.MouseButton1Click:Connect(function()
-                if Text == "Infinite Stamina" and not CheckPremium() then
+                if (Text == "Infinite Stamina" or Text == "God Mode") and not CheckPremium() then
                     PlayAudio("Error")
                     Library:Notify("Premium Locked", "You need to buy the Gamepass!", 3)
                     return
@@ -1312,7 +1419,7 @@ function Library:Init()
             return Btn
         end
         
-        -- FEEDBACK BOX CREATION (REDESIGNED)
+        -- FEEDBACK BOX CREATION
         function TabData:CreateFeedbackBox()
             local BoxFrame = Instance.new("Frame", Page)
             BoxFrame.Size = UDim2.new(1, 0, 0, 125)
@@ -1403,37 +1510,50 @@ function Library:Init()
         -- PLAYER LIST DROPDOWN CREATION
         function TabData:CreatePlayerList()
             local DropdownFrame = Instance.new("Frame", Page)
-            DropdownFrame.Size = UDim2.new(1, 0, 0, 40) -- Initial size
+            DropdownFrame.Size = UDim2.new(1, 0, 0, 40) -- Initial size (collapsed)
             DropdownFrame.BackgroundColor3 = Theme.Accent
             DropdownFrame.BackgroundTransparency = 0.2
             Instance.new("UICorner", DropdownFrame).CornerRadius = UDim.new(0, 10)
             
             local Gradient = Instance.new("UIGradient", DropdownFrame)
             Gradient.Rotation = 90
-            Gradient.Color = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.new(1,1,1)), ColorSequenceKeypoint.new(1, Theme.Accent)}
-            Gradient.Transparency = NumberSequence.new{NumberSequenceKeypoint.new(0, 0.7), NumberSequenceKeypoint.new(1, 0.1)}
+            Gradient.Color = ColorSequence.new{
+                ColorSequenceKeypoint.new(0, Color3.fromRGB(255,255,255)),
+                ColorSequenceKeypoint.new(1, Theme.Accent)
+            }
+            Gradient.Transparency = NumberSequence.new{
+                NumberSequenceKeypoint.new(0, 0.7),
+                NumberSequenceKeypoint.new(1, 0.1)
+            }
+            Gradient.Parent = DropdownFrame
             
             local BtnStroke = Instance.new("UIStroke", DropdownFrame)
-            BtnStroke.Color = Color3.new(1,1,1)
+            BtnStroke.Color = Color3.fromRGB(255,255,255)
             BtnStroke.Transparency = 0.6
             BtnStroke.Thickness = 1
 
             local ToggleBtn = Instance.new("TextButton", DropdownFrame)
-            ToggleBtn.Size = UDim2.new(1, 0, 1, 0)
+            ToggleBtn.Size = UDim2.new(1, 0, 0, 40) -- Covers Top
             ToggleBtn.BackgroundTransparency = 1
             ToggleBtn.Text = "Select Player to Teleport ▼"
-            ToggleBtn.TextColor3 = Color3.new(1,1,1)
+            ToggleBtn.TextColor3 = Color3.fromRGB(255,255,255)
             ToggleBtn.Font = Enum.Font.GothamBold
             ToggleBtn.TextSize = 14
-
-            local ListContainer = Instance.new("ScrollingFrame", Page)
-            ListContainer.Size = UDim2.new(1, 0, 0, 0) -- Hidden
+            
+            local ListContainer = Instance.new("ScrollingFrame", DropdownFrame)
+            ListContainer.Size = UDim2.new(1, 0, 1, -40)
+            ListContainer.Position = UDim2.new(0, 0, 0, 40)
             ListContainer.BackgroundTransparency = 1
-            ListContainer.ClipsDescendants = true
+            ListContainer.Visible = false
+            ListContainer.BorderSizePixel = 0
             ListContainer.ScrollBarThickness = 2
             
             local UIList = Instance.new("UIListLayout", ListContainer)
             UIList.Padding = UDim.new(0, 5)
+            local Pad = Instance.new("UIPadding", ListContainer)
+            Pad.PaddingTop = UDim.new(0, 10)
+            Pad.PaddingLeft = UDim.new(0, 10)
+            Pad.PaddingRight = UDim.new(0, 10)
 
             local IsOpen = false
 
@@ -1446,15 +1566,17 @@ function Library:Init()
                     if v ~= LocalPlayer then
                         local PBtn = Instance.new("TextButton", ListContainer)
                         PBtn.Size = UDim2.new(1, 0, 0, 30)
-                        PBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+                        PBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+                        PBtn.BackgroundTransparency = 0.6
                         PBtn.Text = "  " .. v.DisplayName .. " (@" .. v.Name .. ")"
-                        PBtn.TextColor3 = Theme.TextDim
-                        PBtn.Font = Enum.Font.Gotham
-                        PBtn.TextSize = 13
+                        PBtn.TextColor3 = Color3.new(1,1,1)
+                        PBtn.Font = Enum.Font.GothamMedium
+                        PBtn.TextSize = 12
                         PBtn.TextXAlignment = Enum.TextXAlignment.Left
                         Instance.new("UICorner", PBtn).CornerRadius = UDim.new(0, 6)
                         
                         PBtn.MouseButton1Click:Connect(function()
+                            PlayAudio("Click")
                             if v.Character and v.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
                                 LocalPlayer.Character.HumanoidRootPart.CFrame = v.Character.HumanoidRootPart.CFrame
                                 Library:Notify("Teleport", "Teleported to " .. v.DisplayName, 2)
@@ -1462,7 +1584,7 @@ function Library:Init()
                         end)
                     end
                 end
-                ListContainer.CanvasSize = UDim2.new(0, 0, 0, UIList.AbsoluteContentSize.Y)
+                ListContainer.CanvasSize = UDim2.new(0, 0, 0, UIList.AbsoluteContentSize.Y + 20)
             end
 
             ToggleBtn.MouseButton1Click:Connect(function()
@@ -1471,14 +1593,24 @@ function Library:Init()
                 if IsOpen then
                     ToggleBtn.Text = "Close Player List ▲"
                     RefreshList()
-                    TweenService:Create(ListContainer, TweenInfo.new(0.3), {Size = UDim2.new(1, 0, 0, 150)}):Play()
+                    ListContainer.Visible = true
+                    TweenService:Create(DropdownFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quart), {Size = UDim2.new(1, 0, 0, 200)}):Play()
                 else
                     ToggleBtn.Text = "Select Player to Teleport ▼"
-                    TweenService:Create(ListContainer, TweenInfo.new(0.3), {Size = UDim2.new(1, 0, 0, 0)}):Play()
+                    TweenService:Create(DropdownFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quart), {Size = UDim2.new(1, 0, 0, 40)}):Play()
+                    task.delay(0.2, function() ListContainer.Visible = false end)
                 end
             end)
         end
         
+        -- ADD SUPPORT BUTTON TO EVERY TAB
+        function TabData:AddSupportButton()
+             TabData:CreateButton("Copy Durrnity Link (Support Me!)", function()
+                setclipboard(DurrnityLink)
+                Library:Notify("Success", "Game link copied to clipboard!", 2)
+            end)
+        end
+
         return TabData
     end
     return Tabs
@@ -1487,7 +1619,6 @@ end
 --// INIT
 local Window = Library:Init()
 
--- General Tab
 local GeneralTab = Window:CreateTab("General", "ℹ️")
 GeneralTab:CreateButton("Copy Profile Link", function()
     setclipboard(ProfileLink)
@@ -1498,24 +1629,22 @@ GeneralTab:CreateButton("Copy Gamepass Link", function()
     Library:Notify("Success", "Gamepass link copied!", 3)
 end)
 GeneralTab:CreateFeedbackBox()
+GeneralTab:AddSupportButton()
 
 local MainTab = Window:CreateTab("Main", "🏠")
-
 MainTab:CreateToggle("Enable WalkSpeed", function(val) WalkSpeedEnabled = val end, false)
 MainTab:CreateSlider("WalkSpeed Value", 16, 150, 24, function(val) WalkSpeedValue = val end)
-MainTab:CreateToggle("Noclip", function(val) 
-    NoclipEnabled = val
-    ToggleNoclipSystem(val)
-end, false)
-MainTab:CreateToggle("Auto Skillcheck", function(val)
-    AutoSkillCheckEnabled = val
-end, false)
+MainTab:CreateToggle("Freecam", function(val) ToggleFreecamLogic(val) end, false)
+MainTab:CreateToggle("Noclip", function(val) NoclipEnabled = val ToggleNoclipSystem(val) end, false)
+MainTab:CreateToggle("Auto Skillcheck", function(val) AutoSkillCheckEnabled = val end, false)
+MainTab:AddSupportButton()
 
 local VisualsTab = Window:CreateTab("Visuals", "👁️")
 VisualsTab:CreateToggle("ESP Twisteds", function(val) ESP_Settings.Twisteds.Enabled = val end, false)
 VisualsTab:CreateToggle("ESP Generators", function(val) ESP_Settings.Generators.Enabled = val end, false)
 VisualsTab:CreateToggle("ESP Items", function(val) ESP_Settings.Items.Enabled = val end, false)
 VisualsTab:CreateToggle("ESP Players", function(val) ESP_Settings.Players.Enabled = val end, false)
+VisualsTab:AddSupportButton()
 
 local TeleportTab = Window:CreateTab("Teleports", "✈️")
 TeleportTab:CreateButton("Teleport to Elevator", function()
@@ -1534,102 +1663,61 @@ TeleportTab:CreateButton("Teleport to Elevator", function()
     end)
     Library:Notify("Action", "Teleporting...", 2)
 end)
-
-TeleportTab:CreateToggle("Auto TP Elevator", function(val)
-    AutoEscapeEnabled = val
-end, false)
-
+TeleportTab:CreateToggle("Auto TP Elevator", function(val) AutoEscapeEnabled = val end, false)
 TeleportTab:CreateButton("TP to Uncompleted Machine", function()
     pcall(function()
         local currentRoom = Workspace:FindFirstChild("CurrentRoom")
         if not currentRoom then return end
-        
         local generatorsFolder = nil
         for _, child in pairs(currentRoom:GetChildren()) do
             generatorsFolder = child:FindFirstChild("Generators")
             if generatorsFolder then break end
         end
         if not generatorsFolder then return end
-        
         local targetGenerator = nil
         for _, gen in pairs(generatorsFolder:GetChildren()) do
             local stats = gen:FindFirstChild("Stats")
             if stats then
                 local completedVal = stats:FindFirstChild("Completed")
-                if completedVal and completedVal.Value == false then
-                    targetGenerator = gen
-                    break
-                end
+                if completedVal and completedVal.Value == false then targetGenerator = gen break end
             end
         end
-        
         if targetGenerator and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
             local tpPosFolder = targetGenerator:FindFirstChild("TeleportPositions")
             local targetCFrame = nil
-            if tpPosFolder and #tpPosFolder:GetChildren() > 0 then
-                targetCFrame = tpPosFolder:GetChildren()[1].CFrame
-            else
-                targetCFrame = targetGenerator:GetPivot()
-            end
-            if targetCFrame then
-                LocalPlayer.Character.HumanoidRootPart.CFrame = targetCFrame + Vector3.new(0, 3, 0)
-            end
+            if tpPosFolder and #tpPosFolder:GetChildren() > 0 then targetCFrame = tpPosFolder:GetChildren()[1].CFrame else targetCFrame = targetGenerator:GetPivot() end
+            if targetCFrame then LocalPlayer.Character.HumanoidRootPart.CFrame = targetCFrame + Vector3.new(0, 3, 0) end
         end
     end)
     Library:Notify("Action", "Teleporting...", 2)
 end)
-
 TeleportTab:CreatePlayerList()
+TeleportTab:AddSupportButton()
 
 local FarmingTab = Window:CreateTab("Farming", "🎒")
-
 local function AutoCollectItem(targetName)
     local room = Workspace:FindFirstChild("CurrentRoom")
     if not room then return end
-    
     local items = {}
     for _, child in pairs(room:GetChildren()) do
         local itemFolder = child:FindFirstChild("Items")
-        if itemFolder then
-            for _, v in pairs(itemFolder:GetChildren()) do
-                if v.Name == targetName or (targetName == "Research" and v.Name:match("Research")) then
-                    table.insert(items, v)
-                end
-            end
-        end
-        if child.Name == targetName or (targetName == "Research" and child.Name:match("Research")) then
-             table.insert(items, child)
-        end
+        if itemFolder then for _, v in pairs(itemFolder:GetChildren()) do if v.Name == targetName or (targetName == "Research" and v.Name:match("Research")) then table.insert(items, v) end end end
+        if child.Name == targetName or (targetName == "Research" and child.Name:match("Research")) then table.insert(items, child) end
     end
-
-    if #items == 0 then
-        Library:Notify("Auto Collect", "No " .. targetName .. "s found nearby!", 3)
-        return
-    end
-
+    if #items == 0 then Library:Notify("Auto Collect", "No " .. targetName .. "s found nearby!", 3) return end
     Library:Notify("Auto Collect", "Collecting " .. #items .. " " .. targetName .. "s...", 3)
-
     for _, item in pairs(items) do
         if item and item.Parent and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
             local part = item:IsA("Model") and item.PrimaryPart or item:FindFirstChild("Handle") or item:FindFirstChildOfClass("BasePart")
             local prompt = item:FindFirstChild("ProximityPrompt", true)
-            
             if part and prompt then
                 LocalPlayer.Character.HumanoidRootPart.CFrame = part.CFrame + Vector3.new(0, 3, 0)
                 task.wait(0.25)
-                
                 local start = tick()
                 repeat
                     if item.Parent == nil then break end
                     LocalPlayer.Character.HumanoidRootPart.CFrame = part.CFrame 
-                    
-                    if fireproximityprompt then
-                        fireproximityprompt(prompt)
-                    else
-                        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-                        task.wait()
-                        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-                    end
+                    if fireproximityprompt then fireproximityprompt(prompt) else VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game) task.wait() VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game) end
                     task.wait(0.1)
                 until tick() - start > 2 or item.Parent == nil
             end
@@ -1637,54 +1725,32 @@ local function AutoCollectItem(targetName)
     end
     Library:Notify("Auto Collect", "Collection Complete.", 3)
 end
+FarmingTab:CreateButton("Auto Collect Tapes", function() AutoCollectItem("Tape") end)
+FarmingTab:CreateButton("Auto Collect Research", function() AutoCollectItem("Research") end)
+FarmingTab:AddSupportButton()
 
-FarmingTab:CreateButton("Auto Collect Tapes", function()
-    AutoCollectItem("Tape")
-end)
-
-FarmingTab:CreateButton("Auto Collect Research", function()
-    AutoCollectItem("Research")
-end)
-
-local PremiumTab = Window:CreateTab("Premium", "💎")
-PremiumTab:CreateToggle("Infinite Stamina", function(val)
-    InfiniteStaminaEnabled = val
+local PremiumTab = Window:CreateTab("Premium 💎", "💎")
+PremiumTab:CreateToggle("Infinite Stamina", function(val) InfiniteStaminaEnabled = val end, false)
+PremiumTab:CreateToggle("God Mode", function(val) 
+    if not CheckPremium() then
+        PlayAudio("Error")
+        Library:Notify("Premium Locked", "You need to buy the Gamepass!", 3)
+        return
+    end
+    GodModeEnabled = val
+    if val then Library:Notify("God Mode", "Hitbox Removed (CanTouch = false)", 3) else Library:Notify("God Mode", "Disabled", 2) end
 end, false)
+PremiumTab:AddSupportButton()
 
 local StuffTab = Window:CreateTab("Stuff", "⚙️")
-StuffTab:CreateButton("Force Reset", function()
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-        LocalPlayer.Character.Humanoid.Health = 0
-    end
-    Library:Notify("Action", "Resetting...", 2)
-end)
-
-StuffTab:CreateButton("Infinite Yield", function()
-    loadstring(game:HttpGet('https://raw.githubusercontent.com/DarkNetworks/Infinite-Yield/main/latest.lua'))()
-end)
-
-StuffTab:CreateToggle("Fullbright", function(val)
-    if val then
-        Lighting.Brightness = 2
-        Lighting.ClockTime = 14
-        Lighting.GlobalShadows = false
-        Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
-    else
-        Lighting.Brightness = OriginalLighting.Brightness
-        Lighting.ClockTime = OriginalLighting.ClockTime
-        Lighting.GlobalShadows = OriginalLighting.GlobalShadows
-        Lighting.OutdoorAmbient = OriginalLighting.OutdoorAmbient
-    end
-end, false)
+StuffTab:CreateButton("Force Reset", function() if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then LocalPlayer.Character.Humanoid.Health = 0 end Library:Notify("Action", "Resetting...", 2) end)
+StuffTab:CreateButton("Infinite Yield", function() loadstring(game:HttpGet('https://raw.githubusercontent.com/DarkNetworks/Infinite-Yield/main/latest.lua'))() end)
+StuffTab:CreateToggle("Fullbright", function(val) if val then Lighting.Brightness = 2 Lighting.ClockTime = 14 Lighting.GlobalShadows = false Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128) else Lighting.Brightness = OriginalLighting.Brightness Lighting.ClockTime = OriginalLighting.ClockTime Lighting.GlobalShadows = OriginalLighting.GlobalShadows Lighting.OutdoorAmbient = OriginalLighting.OutdoorAmbient end end, false)
+StuffTab:AddSupportButton()
 
 local SettingsTab = Window:CreateTab("Settings", "🛠️")
-
-SettingsTab:CreateToggle("Enable UI Sounds", function(val)
-    SoundEnabled = val
-end, true)
-
-local KeybindButton
-KeybindButton = SettingsTab:CreateButton("Menu Keybind: LeftControl", function()
+SettingsTab:CreateToggle("Enable UI Sounds", function(val) SoundEnabled = val end, true)
+local KeybindButton = SettingsTab:CreateButton("Menu Keybind: LeftControl", function()
     KeybindButton.Text = "Press any key..."
     IsSettingKeybind = true 
     local InputConnection
@@ -1699,8 +1765,8 @@ KeybindButton = SettingsTab:CreateButton("Menu Keybind: LeftControl", function()
         end
     end)
 end)
+SettingsTab:AddSupportButton()
 
---// MOBILE TOGGLE BUTTON (FIX)
 local MobileToggle = Instance.new("TextButton", ScreenGui)
 MobileToggle.Name = "MobileToggle"
 MobileToggle.Size = UDim2.new(0, 50, 0, 50)
@@ -1713,21 +1779,13 @@ MobileToggle.Font = Enum.Font.GothamBold
 MobileToggle.TextSize = 12
 Instance.new("UICorner", MobileToggle).CornerRadius = UDim.new(1, 0)
 Instance.new("UIStroke", MobileToggle).Color = Theme.Stroke
-
-if not UserInputService.TouchEnabled then
-    MobileToggle.Visible = false
-end
-
+if not UserInputService.TouchEnabled then MobileToggle.Visible = false end
 MobileToggle.MouseButton1Click:Connect(function()
     local WindowFrame = ScreenGui:FindFirstChild("Window")
     if WindowFrame then
         IsMenuOpen = not IsMenuOpen
-        if IsMenuOpen then
-            TweenService:Create(WindowFrame, TweenInfo.new(0.6, Enum.EasingStyle.Back), {Size = UDim2.new(0, 650, 0, 420)}):Play()
-        else
-            TweenService:Create(WindowFrame, TweenInfo.new(0.6, Enum.EasingStyle.Quart), {Size = UDim2.new(0, 80, 0, 45)}):Play()
-        end
+        if IsMenuOpen then TweenService:Create(WindowFrame, TweenInfo.new(0.6, Enum.EasingStyle.Back), {Size = UDim2.new(0, 650, 0, 420)}):Play() else TweenService:Create(WindowFrame, TweenInfo.new(0.6, Enum.EasingStyle.Quart), {Size = UDim2.new(0, 80, 0, 45)}):Play() end
     end
 end)
 
-print("Poorly Scripted v8.4 - Styled Dropdown Added")
+print("Poorly Scripted v8.9 - Copy Link Everywhere")
