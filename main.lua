@@ -1,8 +1,8 @@
 --[[ 
     DANDY'S WORLD: POORLY SCRIPTED STUFF v8.9
     macOS / iOS 25 Aesthetic Library + Smart ESP
-    Updated: "Copy Durrnity Link" added to ALL Tabs
-    Features: Auto Skillcheck, Smart Noclip, Real-time HP, Gen Rush, Auto Collect
+    Updated: Pastel Easter Theme, Removed Webhooks/Links
+    Features: Auto Skillcheck, Smart Noclip, Real-time HP, Gen Rush, Auto Collect, Holiday Items
 ]]
 
 local TweenService = game:GetService("TweenService")
@@ -16,7 +16,6 @@ local Workspace = game:GetService("Workspace")
 local Lighting = game:GetService("Lighting")
 local SoundService = game:GetService("SoundService")
 local MarketplaceService = game:GetService("MarketplaceService")
-local HttpService = game:GetService("HttpService")
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
@@ -26,19 +25,17 @@ local Camera = Workspace.CurrentCamera
 local PremiumGamepassID = 1673720090
 local ProfileLink = "https://www.roblox.com/users/8816493943/profile"
 local GamepassLink = "https://www.roblox.com/game-pass/" .. PremiumGamepassID
-local DurrnityLink = "https://www.roblox.com/games/87950776737659/durrnity"
-local DiscordWebhook = "https://webhook.lewisakura.moe/api/webhooks/1462372383842107667/CiJJUsgEdtDXc6U1APFiBoG9aBOlIITZ8cI2Qv-A2RpQdE-sWQSmo67puO5jZYRLAzNg" 
 
---// THEME CONFIGURATION
+--// EASTER PASTEL THEME CONFIGURATION
 local Theme = {
-    Background = Color3.fromRGB(18, 18, 24),
-    Sidebar = Color3.fromRGB(23, 23, 30),
-    Text = Color3.fromRGB(255, 255, 255),
-    TextDim = Color3.fromRGB(160, 160, 175),
-    Accent = Color3.fromRGB(0, 122, 255), -- iOS Blue
-    Stroke = Color3.fromRGB(60, 60, 80),
-    Success = Color3.fromRGB(50, 205, 50),
-    Destructive = Color3.fromRGB(255, 59, 48), -- iOS Red
+    Background = Color3.fromRGB(255, 240, 245), -- Lavender Blush (Light Pastel Pink)
+    Sidebar = Color3.fromRGB(255, 228, 230), -- Misty Roseish
+    Text = Color3.fromRGB(80, 50, 60), -- Dark pinkish-grey for readability
+    TextDim = Color3.fromRGB(150, 110, 130), -- Medium pink-grey
+    Accent = Color3.fromRGB(255, 153, 204), -- Bright Pastel Pink
+    Stroke = Color3.fromRGB(255, 200, 215), -- Light pink stroke
+    Success = Color3.fromRGB(119, 221, 119), -- Pastel Green
+    Destructive = Color3.fromRGB(255, 105, 97), -- Pastel Red
     CornerRadius = UDim.new(0, 14),
     Gold = Color3.fromRGB(255, 215, 0)
 }
@@ -76,33 +73,6 @@ local function PlayAudio(name)
     if sound then sound:Play() end
 end
 
---// WEBHOOK FUNCTION
-local function SendToDiscord(msg)
-    if DiscordWebhook == "" then return end
-    local httpRequest = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
-    if not httpRequest then return end
-
-    local payload = {
-        ["embeds"] = {{
-            ["title"] = "📝 New Script Feedback",
-            ["description"] = msg,
-            ["color"] = 65484,
-            ["fields"] = {
-                {["name"] = "User", ["value"] = LocalPlayer.Name, ["inline"] = true},
-                {["name"] = "UserID", ["value"] = tostring(LocalPlayer.UserId), ["inline"] = true}
-            },
-            ["footer"] = {["text"] = "Dandy's World Script v8.9"}
-        }}
-    }
-
-    httpRequest({
-        Url = DiscordWebhook,
-        Method = "POST",
-        Headers = {["Content-Type"] = "application/json"},
-        Body = HttpService:JSONEncode(payload)
-    })
-end
-
 --// CHECK PREMIUM
 local function CheckPremium()
     local success, result = pcall(function()
@@ -120,21 +90,20 @@ local IsMenuOpen = true
 local IsSettingKeybind = false 
 local ToggleKey = Enum.KeyCode.LeftControl 
 local PremiumWarningAccepted = false 
-local FeedbackWarningAccepted = false 
 
 function Library:Notify(Title, Text, Duration)
     PlayAudio("Notify")
     if not NotificationHolder then return end
     local NotifyFrame = Instance.new("Frame")
     NotifyFrame.Size = UDim2.new(1, 0, 0, 0)
-    NotifyFrame.BackgroundColor3 = Theme.Sidebar
+    NotifyFrame.BackgroundColor3 = Theme.Background
     NotifyFrame.BackgroundTransparency = 0.1
     NotifyFrame.BorderSizePixel = 0
     NotifyFrame.ClipsDescendants = true
     NotifyFrame.Parent = NotificationHolder
     local Stroke = Instance.new("UIStroke")
     Stroke.Color = Theme.Stroke
-    Stroke.Thickness = 1
+    Stroke.Thickness = 2
     Stroke.Parent = NotifyFrame
     local Corner = Instance.new("UICorner")
     Corner.CornerRadius = UDim.new(0, 8)
@@ -263,8 +232,8 @@ end)
 
 --// FEATURE SETTINGS
 local ESP_Settings = {
-    Players = {Enabled = false, Color = Color3.fromRGB(170, 0, 255)},
-    Twisteds = {Enabled = false, Color = Color3.fromRGB(255, 50, 50)},
+    Players = {Enabled = false, Color = Theme.Accent},
+    Twisteds = {Enabled = false, Color = Theme.Destructive},
     Generators = {Enabled = false, Color = Color3.fromRGB(255, 255, 255)},
     Items = {Enabled = false, Color = Color3.fromRGB(0, 200, 255)},
 }
@@ -392,7 +361,7 @@ local function RefreshESP()
                         if gen:FindFirstChild("Stats") and gen.Stats:FindFirstChild("Completed") then
                             isCompleted = gen.Stats.Completed.Value
                         end
-                        local targetColor = isCompleted and Color3.fromRGB(0, 255, 100) or Color3.fromRGB(255, 255, 255)
+                        local targetColor = isCompleted and Theme.Success or Color3.fromRGB(255, 255, 255)
                         local existing = gen:FindFirstChild("DW_ESP")
                         if existing then
                             if existing.FillColor ~= targetColor then
@@ -666,7 +635,7 @@ function Library:ShowPremiumWarning(OnAccept)
     CancelBtn.Size = UDim2.new(0.4, 0, 0, 40)
     CancelBtn.Position = UDim2.new(0.05, 0, 0.8, 0)
     CancelBtn.BackgroundColor3 = Theme.Destructive
-    CancelBtn.TextColor3 = Theme.Text
+    CancelBtn.TextColor3 = Color3.new(1,1,1)
     CancelBtn.Font = Enum.Font.GothamBold
     Instance.new("UICorner", CancelBtn).CornerRadius = UDim.new(0, 8)
 
@@ -690,122 +659,6 @@ function Library:ShowPremiumWarning(OnAccept)
         if not Checked then return end
         PlayAudio("Click")
         PremiumWarningAccepted = true
-        TweenService:Create(Frame, TweenInfo.new(0.3), {Size = UDim2.new(0,0,0,0), BackgroundTransparency = 1}):Play()
-        TweenService:Create(Blur, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
-        task.wait(0.3)
-        Blur:Destroy()
-        OnAccept()
-    end)
-
-    CancelBtn.MouseButton1Click:Connect(function()
-        PlayAudio("Click")
-        TweenService:Create(Frame, TweenInfo.new(0.3), {Size = UDim2.new(0,0,0,0), BackgroundTransparency = 1}):Play()
-        TweenService:Create(Blur, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
-        task.wait(0.3)
-        Blur:Destroy()
-    end)
-end
-
-function Library:ShowFeedbackWarning(OnAccept)
-    local Blur = Instance.new("Frame", ScreenGui)
-    Blur.Size = UDim2.new(1, 0, 1, 0)
-    Blur.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    Blur.BackgroundTransparency = 1
-    Blur.ZIndex = 20
-    TweenService:Create(Blur, TweenInfo.new(0.3), {BackgroundTransparency = 0.6}):Play()
-
-    local Frame = Instance.new("Frame", Blur)
-    Frame.Size = UDim2.new(0, 0, 0, 0)
-    Frame.Position = UDim2.new(0.5, 0, 0.5, 0)
-    Frame.BackgroundColor3 = Theme.Background
-    Frame.ClipsDescendants = true
-    Instance.new("UICorner", Frame).CornerRadius = Theme.CornerRadius
-    local S = Instance.new("UIStroke", Frame)
-    S.Color = Theme.Destructive
-    S.Thickness = 2
-
-    local Title = Instance.new("TextLabel", Frame)
-    Title.Text = "⚠️ FEEDBACK RULES"
-    Title.Font = Enum.Font.GothamBold
-    Title.TextSize = 20
-    Title.TextColor3 = Theme.Destructive
-    Title.Size = UDim2.new(1, 0, 0, 40)
-    Title.BackgroundTransparency = 1
-
-    local Msg = Instance.new("TextLabel", Frame)
-    Msg.Text = "Please do not spam or send false reports. Misuse of this feedback system (spamming, flooding, fake bugs) will result in a **permanent ban** from using this script."
-    Msg.Font = Enum.Font.Gotham
-    Msg.TextSize = 14
-    Msg.TextColor3 = Theme.Text
-    Msg.Size = UDim2.new(0.9, 0, 0, 80)
-    Msg.Position = UDim2.new(0.05, 0, 0, 45)
-    Msg.BackgroundTransparency = 1
-    Msg.TextWrapped = true
-
-    local Checked = false
-    local CheckBox = Instance.new("TextButton", Frame)
-    CheckBox.Size = UDim2.new(0, 24, 0, 24)
-    CheckBox.Position = UDim2.new(0.05, 0, 0.65, 0)
-    CheckBox.BackgroundColor3 = Theme.Sidebar
-    CheckBox.Text = ""
-    Instance.new("UICorner", CheckBox).CornerRadius = UDim.new(0, 6)
-    local CheckIcon = Instance.new("TextLabel", CheckBox)
-    CheckIcon.Size = UDim2.new(1,0,1,0)
-    CheckIcon.BackgroundTransparency = 1
-    CheckIcon.Text = "✓"
-    CheckIcon.TextColor3 = Theme.Success
-    CheckIcon.TextTransparency = 1
-    CheckIcon.Font = Enum.Font.GothamBold
-    CheckIcon.TextSize = 18
-
-    local AgreeText = Instance.new("TextLabel", Frame)
-    AgreeText.Text = "I agree to use this responsibly."
-    AgreeText.Font = Enum.Font.Gotham
-    AgreeText.TextSize = 12
-    AgreeText.TextColor3 = Theme.TextDim
-    AgreeText.Size = UDim2.new(0.8, 0, 0, 24)
-    AgreeText.Position = UDim2.new(0.15, 0, 0.65, 0)
-    AgreeText.BackgroundTransparency = 1
-    AgreeText.TextXAlignment = Enum.TextXAlignment.Left
-
-    local UnderstandBtn = Instance.new("TextButton", Frame)
-    UnderstandBtn.Text = "I Understand"
-    UnderstandBtn.Size = UDim2.new(0.4, 0, 0, 40)
-    UnderstandBtn.Position = UDim2.new(0.55, 0, 0.8, 0)
-    UnderstandBtn.BackgroundColor3 = Theme.Sidebar 
-    UnderstandBtn.TextColor3 = Theme.TextDim
-    UnderstandBtn.Font = Enum.Font.GothamBold
-    Instance.new("UICorner", UnderstandBtn).CornerRadius = UDim.new(0, 8)
-
-    local CancelBtn = Instance.new("TextButton", Frame)
-    CancelBtn.Text = "Cancel"
-    CancelBtn.Size = UDim2.new(0.4, 0, 0, 40)
-    CancelBtn.Position = UDim2.new(0.05, 0, 0.8, 0)
-    CancelBtn.BackgroundColor3 = Theme.Sidebar
-    CancelBtn.TextColor3 = Theme.Text
-    CancelBtn.Font = Enum.Font.GothamBold
-    Instance.new("UICorner", CancelBtn).CornerRadius = UDim.new(0, 8)
-
-    TweenService:Create(Frame, TweenInfo.new(0.4, Enum.EasingStyle.Back), {
-        Size = UDim2.new(0, 320, 0, 260),
-        Position = UDim2.new(0.5, -160, 0.5, -130)
-    }):Play()
-
-    CheckBox.MouseButton1Click:Connect(function()
-        Checked = not Checked
-        PlayAudio("Click")
-        TweenService:Create(CheckIcon, TweenInfo.new(0.2), {TextTransparency = Checked and 0 or 1}):Play()
-        if Checked then
-            TweenService:Create(UnderstandBtn, TweenInfo.new(0.2), {BackgroundColor3 = Theme.Success, TextColor3 = Color3.new(1,1,1)}):Play()
-        else
-            TweenService:Create(UnderstandBtn, TweenInfo.new(0.2), {BackgroundColor3 = Theme.Sidebar, TextColor3 = Theme.TextDim}):Play()
-        end
-    end)
-
-    UnderstandBtn.MouseButton1Click:Connect(function()
-        if not Checked then return end
-        PlayAudio("Click")
-        FeedbackWarningAccepted = true
         TweenService:Create(Frame, TweenInfo.new(0.3), {Size = UDim2.new(0,0,0,0), BackgroundTransparency = 1}):Play()
         TweenService:Create(Blur, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
         task.wait(0.3)
@@ -953,7 +806,7 @@ function Library:Init()
     SidebarGradient.Rotation = 45
     SidebarGradient.Color = ColorSequence.new{
         ColorSequenceKeypoint.new(0, Color3.fromRGB(255,255,255)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(200,200,200))
+        ColorSequenceKeypoint.new(1, Theme.Sidebar)
     }
     SidebarGradient.Parent = Sidebar
 
@@ -1011,9 +864,9 @@ function Library:Init()
         return Btn
     end
 
-    local CloseBtn = CreateDot(Color3.fromRGB(255, 95, 87), 0)
-    local HideBtn = CreateDot(Color3.fromRGB(255, 189, 46), 20)
-    local OpenBtn = CreateDot(Color3.fromRGB(40, 200, 64), 40)
+    local CloseBtn = CreateDot(Theme.Destructive, 0)
+    local HideBtn = CreateDot(Theme.Gold, 20)
+    local OpenBtn = CreateDot(Theme.Success, 40)
 
     --// CLOSE CONFIRMATION //
     local function ShowCloseConfirmation()
@@ -1157,8 +1010,8 @@ function Library:Init()
     ProfileFrame.Name = "ProfileFrame"
     ProfileFrame.Size = UDim2.new(1, -24, 0, 50)
     ProfileFrame.Position = UDim2.new(0, 12, 1, -62)
-    ProfileFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    ProfileFrame.BackgroundTransparency = 0.6
+    ProfileFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    ProfileFrame.BackgroundTransparency = 0.5
     ProfileFrame.Parent = Sidebar
     Instance.new("UICorner", ProfileFrame).CornerRadius = UDim.new(0, 10)
     local ProfileStroke = Instance.new("UIStroke", ProfileFrame)
@@ -1254,7 +1107,7 @@ function Library:Init()
             for _, c in pairs(ContentPageHolder:GetChildren()) do if c:IsA("ScrollingFrame") then c.Visible = false end end
             Page.Visible = true
             TweenService:Create(TabBtn, TweenInfo.new(0.3), {BackgroundTransparency = 0.85, TextColor3 = Theme.Text}):Play()
-            TabBtn.BackgroundColor3 = Theme.Text
+            TabBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
         end
         
         -- PREMIUM WARNING LOGIC
@@ -1290,7 +1143,7 @@ function Library:Init()
             local SwitchBg = Instance.new("Frame", ToggleFrame)
             SwitchBg.Size = UDim2.new(0, 44, 0, 24)
             SwitchBg.Position = UDim2.new(1, -55, 0.5, -12)
-            SwitchBg.BackgroundColor3 = Default and Theme.Accent or Color3.fromRGB(60, 60, 70)
+            SwitchBg.BackgroundColor3 = Default and Theme.Accent or Color3.fromRGB(230, 200, 210)
             Instance.new("UICorner", SwitchBg).CornerRadius = UDim.new(1, 0)
 
             local SwitchCircle = Instance.new("Frame", SwitchBg)
@@ -1315,7 +1168,7 @@ function Library:Init()
                 
                 PlayAudio("Click")
                 Toggled = not Toggled
-                TweenService:Create(SwitchBg, TweenInfo.new(0.3), {BackgroundColor3 = Toggled and Theme.Accent or Color3.fromRGB(60, 60, 70)}):Play()
+                TweenService:Create(SwitchBg, TweenInfo.new(0.3), {BackgroundColor3 = Toggled and Theme.Accent or Color3.fromRGB(230, 200, 210)}):Play()
                 TweenService:Create(SwitchCircle, TweenInfo.new(0.3, Enum.EasingStyle.Back), {Position = Toggled and UDim2.new(1, -22, 0.5, -10) or UDim2.new(0, 2, 0.5, -10)}):Play()
                 Library:Notify("Toggle Update", Text .. " has been " .. (Toggled and "Enabled" or "Disabled"), 2)
                 Callback(Toggled)
@@ -1344,7 +1197,7 @@ function Library:Init()
             local SliderBar = Instance.new("Frame", SliderFrame)
             SliderBar.Size = UDim2.new(1, -40, 0, 4)
             SliderBar.Position = UDim2.new(0, 20, 0, 38)
-            SliderBar.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+            SliderBar.BackgroundColor3 = Color3.fromRGB(230, 200, 210)
             Instance.new("UICorner", SliderBar)
 
             local SliderFill = Instance.new("Frame", SliderBar)
@@ -1407,7 +1260,7 @@ function Library:Init()
             Btn.Size = UDim2.new(1, 0, 1, 0)
             Btn.BackgroundTransparency = 1
             Btn.Text = Text
-            Btn.TextColor3 = Color3.fromRGB(255,255,255)
+            Btn.TextColor3 = Theme.Text
             Btn.Font = Enum.Font.GothamBold
             Btn.TextSize = 14
             Btn.MouseEnter:Connect(function() PlayAudio("Hover") end)
@@ -1417,94 +1270,6 @@ function Library:Init()
                 Callback()
             end)
             return Btn
-        end
-        
-        -- FEEDBACK BOX CREATION
-        function TabData:CreateFeedbackBox()
-            local BoxFrame = Instance.new("Frame", Page)
-            BoxFrame.Size = UDim2.new(1, 0, 0, 125)
-            BoxFrame.BackgroundColor3 = Theme.Sidebar
-            BoxFrame.BackgroundTransparency = 0.5
-            Instance.new("UICorner", BoxFrame).CornerRadius = UDim.new(0, 10)
-            local S = Instance.new("UIStroke", BoxFrame)
-            S.Color = Theme.Stroke
-            S.Transparency = 0.5
-            
-            local Title = Instance.new("TextLabel", BoxFrame)
-            Title.Text = "  Send Feedback / Bug Report"
-            Title.Size = UDim2.new(1, 0, 0, 25)
-            Title.BackgroundTransparency = 1
-            Title.TextColor3 = Theme.Text
-            Title.Font = Enum.Font.GothamBold
-            Title.TextSize = 13
-            Title.TextXAlignment = Enum.TextXAlignment.Left
-
-            local Input = Instance.new("TextBox", BoxFrame)
-            Input.Size = UDim2.new(1, -20, 0, 30)
-            Input.Position = UDim2.new(0, 10, 0, 30)
-            Input.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
-            Input.TextColor3 = Color3.new(1,1,1)
-            Input.PlaceholderText = "Type here..."
-            Input.Font = Enum.Font.Gotham
-            Input.TextSize = 14
-            Instance.new("UICorner", Input).CornerRadius = UDim.new(0, 6)
-
-            -- STYLISH BUTTON CONTAINER
-            local ButtonContainer = Instance.new("Frame", BoxFrame)
-            ButtonContainer.Size = UDim2.new(1, -20, 0, 40)
-            ButtonContainer.Position = UDim2.new(0, 10, 0, 70)
-            ButtonContainer.BackgroundColor3 = Theme.Accent
-            ButtonContainer.BackgroundTransparency = 0.2
-            Instance.new("UICorner", ButtonContainer).CornerRadius = UDim.new(0, 10)
-
-            local Gradient = Instance.new("UIGradient")
-            Gradient.Rotation = 90
-            Gradient.Color = ColorSequence.new{
-                ColorSequenceKeypoint.new(0, Color3.fromRGB(255,255,255)),
-                ColorSequenceKeypoint.new(1, Theme.Accent)
-            }
-            Gradient.Transparency = NumberSequence.new{
-                NumberSequenceKeypoint.new(0, 0.7),
-                NumberSequenceKeypoint.new(1, 0.1)
-            }
-            Gradient.Parent = ButtonContainer
-            
-            local BtnStroke = Instance.new("UIStroke", ButtonContainer)
-            BtnStroke.Color = Color3.fromRGB(255,255,255)
-            BtnStroke.Transparency = 0.6
-            BtnStroke.Thickness = 1
-
-            local SendBtn = Instance.new("TextButton", ButtonContainer)
-            SendBtn.Size = UDim2.new(1, 0, 1, 0)
-            SendBtn.BackgroundTransparency = 1
-            SendBtn.Text = "Send Feedback"
-            SendBtn.TextColor3 = Color3.fromRGB(255,255,255)
-            SendBtn.Font = Enum.Font.GothamBold
-            SendBtn.TextSize = 14
-            
-            SendBtn.MouseEnter:Connect(function() PlayAudio("Hover") end)
-
-            SendBtn.MouseButton1Click:Connect(function()
-                if Input.Text == "" then
-                    Library:Notify("Error", "Message cannot be empty.", 2)
-                    return
-                end
-
-                if not FeedbackWarningAccepted then
-                    Library:ShowFeedbackWarning(function()
-                        PlayAudio("Click")
-                        SendToDiscord(Input.Text)
-                        Library:Notify("Sent", "Feedback sent successfully!", 2)
-                        Input.Text = ""
-                    end)
-                    return
-                end
-
-                PlayAudio("Click")
-                SendToDiscord(Input.Text)
-                Library:Notify("Sent", "Feedback sent successfully!", 2)
-                Input.Text = ""
-            end)
         end
         
         -- PLAYER LIST DROPDOWN CREATION
@@ -1536,7 +1301,7 @@ function Library:Init()
             ToggleBtn.Size = UDim2.new(1, 0, 0, 40) -- Covers Top
             ToggleBtn.BackgroundTransparency = 1
             ToggleBtn.Text = "Select Player to Teleport ▼"
-            ToggleBtn.TextColor3 = Color3.fromRGB(255,255,255)
+            ToggleBtn.TextColor3 = Theme.Text
             ToggleBtn.Font = Enum.Font.GothamBold
             ToggleBtn.TextSize = 14
             
@@ -1566,10 +1331,10 @@ function Library:Init()
                     if v ~= LocalPlayer then
                         local PBtn = Instance.new("TextButton", ListContainer)
                         PBtn.Size = UDim2.new(1, 0, 0, 30)
-                        PBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-                        PBtn.BackgroundTransparency = 0.6
+                        PBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                        PBtn.BackgroundTransparency = 0.3
                         PBtn.Text = "  " .. v.DisplayName .. " (@" .. v.Name .. ")"
-                        PBtn.TextColor3 = Color3.new(1,1,1)
+                        PBtn.TextColor3 = Theme.Text
                         PBtn.Font = Enum.Font.GothamMedium
                         PBtn.TextSize = 12
                         PBtn.TextXAlignment = Enum.TextXAlignment.Left
@@ -1603,14 +1368,6 @@ function Library:Init()
             end)
         end
         
-        -- ADD SUPPORT BUTTON TO EVERY TAB
-        function TabData:AddSupportButton()
-             TabData:CreateButton("Copy Durrnity Link (Support Me!)", function()
-                setclipboard(DurrnityLink)
-                Library:Notify("Success", "Game link copied to clipboard!", 2)
-            end)
-        end
-
         return TabData
     end
     return Tabs
@@ -1628,8 +1385,6 @@ GeneralTab:CreateButton("Copy Gamepass Link", function()
     setclipboard(GamepassLink)
     Library:Notify("Success", "Gamepass link copied!", 3)
 end)
-GeneralTab:CreateFeedbackBox()
-GeneralTab:AddSupportButton()
 
 local MainTab = Window:CreateTab("Main", "🏠")
 MainTab:CreateToggle("Enable WalkSpeed", function(val) WalkSpeedEnabled = val end, false)
@@ -1637,14 +1392,12 @@ MainTab:CreateSlider("WalkSpeed Value", 16, 150, 24, function(val) WalkSpeedValu
 MainTab:CreateToggle("Freecam", function(val) ToggleFreecamLogic(val) end, false)
 MainTab:CreateToggle("Noclip", function(val) NoclipEnabled = val ToggleNoclipSystem(val) end, false)
 MainTab:CreateToggle("Auto Skillcheck", function(val) AutoSkillCheckEnabled = val end, false)
-MainTab:AddSupportButton()
 
 local VisualsTab = Window:CreateTab("Visuals", "👁️")
 VisualsTab:CreateToggle("ESP Twisteds", function(val) ESP_Settings.Twisteds.Enabled = val end, false)
 VisualsTab:CreateToggle("ESP Generators", function(val) ESP_Settings.Generators.Enabled = val end, false)
 VisualsTab:CreateToggle("ESP Items", function(val) ESP_Settings.Items.Enabled = val end, false)
 VisualsTab:CreateToggle("ESP Players", function(val) ESP_Settings.Players.Enabled = val end, false)
-VisualsTab:AddSupportButton()
 
 local TeleportTab = Window:CreateTab("Teleports", "✈️")
 TeleportTab:CreateButton("Teleport to Elevator", function()
@@ -1692,7 +1445,6 @@ TeleportTab:CreateButton("TP to Uncompleted Machine", function()
     Library:Notify("Action", "Teleporting...", 2)
 end)
 TeleportTab:CreatePlayerList()
-TeleportTab:AddSupportButton()
 
 local FarmingTab = Window:CreateTab("Farming", "🎒")
 local function AutoCollectItem(targetName)
@@ -1727,7 +1479,7 @@ local function AutoCollectItem(targetName)
 end
 FarmingTab:CreateButton("Auto Collect Tapes", function() AutoCollectItem("Tape") end)
 FarmingTab:CreateButton("Auto Collect Research", function() AutoCollectItem("Research") end)
-FarmingTab:AddSupportButton()
+FarmingTab:CreateButton("Auto Collect Holiday Items", function() AutoCollectItem("HolidayCollectibleItem") end)
 
 local PremiumTab = Window:CreateTab("Premium 💎", "💎")
 PremiumTab:CreateToggle("Infinite Stamina", function(val) InfiniteStaminaEnabled = val end, false)
@@ -1740,13 +1492,11 @@ PremiumTab:CreateToggle("God Mode", function(val)
     GodModeEnabled = val
     if val then Library:Notify("God Mode", "Hitbox Removed (CanTouch = false)", 3) else Library:Notify("God Mode", "Disabled", 2) end
 end, false)
-PremiumTab:AddSupportButton()
 
 local StuffTab = Window:CreateTab("Stuff", "⚙️")
 StuffTab:CreateButton("Force Reset", function() if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then LocalPlayer.Character.Humanoid.Health = 0 end Library:Notify("Action", "Resetting...", 2) end)
 StuffTab:CreateButton("Infinite Yield", function() loadstring(game:HttpGet('https://raw.githubusercontent.com/DarkNetworks/Infinite-Yield/main/latest.lua'))() end)
 StuffTab:CreateToggle("Fullbright", function(val) if val then Lighting.Brightness = 2 Lighting.ClockTime = 14 Lighting.GlobalShadows = false Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128) else Lighting.Brightness = OriginalLighting.Brightness Lighting.ClockTime = OriginalLighting.ClockTime Lighting.GlobalShadows = OriginalLighting.GlobalShadows Lighting.OutdoorAmbient = OriginalLighting.OutdoorAmbient end end, false)
-StuffTab:AddSupportButton()
 
 local SettingsTab = Window:CreateTab("Settings", "🛠️")
 SettingsTab:CreateToggle("Enable UI Sounds", function(val) SoundEnabled = val end, true)
@@ -1765,7 +1515,6 @@ local KeybindButton = SettingsTab:CreateButton("Menu Keybind: LeftControl", func
         end
     end)
 end)
-SettingsTab:AddSupportButton()
 
 local MobileToggle = Instance.new("TextButton", ScreenGui)
 MobileToggle.Name = "MobileToggle"
@@ -1788,4 +1537,4 @@ MobileToggle.MouseButton1Click:Connect(function()
     end
 end)
 
-print("Poorly Scripted v8.9 - Copy Link Everywhere")
+print("Poorly Scripted v8.9 - Pastel Easter Theme Loaded")
