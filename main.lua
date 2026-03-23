@@ -1,7 +1,7 @@
 --[[ 
-    DANDY'S WORLD: POORLY SCRIPTED STUFF v8.9
+    DANDY'S WORLD: POORLY SCRIPTED STUFF v8.9 (OPTIMIZED)
     macOS / iOS 25 Aesthetic Library + Smart ESP
-    Updated: Pastel Easter Theme, Removed Webhooks/Links
+    Updated: Pastel Easter Theme, Removed Webhooks/Links, Heavily Optimized
     Features: Auto Skillcheck, Smart Noclip, Real-time HP, Gen Rush, Auto Collect, Holiday Items
 ]]
 
@@ -28,9 +28,9 @@ local GamepassLink = "https://www.roblox.com/game-pass/" .. PremiumGamepassID
 
 --// EASTER PASTEL THEME CONFIGURATION
 local Theme = {
-    Background = Color3.fromRGB(255, 240, 245), -- Lavender Blush (Light Pastel Pink)
+    Background = Color3.fromRGB(255, 240, 245), -- Lavender Blush
     Sidebar = Color3.fromRGB(255, 228, 230), -- Misty Roseish
-    Text = Color3.fromRGB(80, 50, 60), -- Dark pinkish-grey for readability
+    Text = Color3.fromRGB(80, 50, 60), -- Dark pinkish-grey
     TextDim = Color3.fromRGB(150, 110, 130), -- Medium pink-grey
     Accent = Color3.fromRGB(255, 153, 204), -- Bright Pastel Pink
     Stroke = Color3.fromRGB(255, 200, 215), -- Light pink stroke
@@ -386,11 +386,17 @@ local function RefreshESP()
     end
 end
 
-RunService.Stepped:Connect(RefreshESP)
+-- OPTIMIZATION: Shifted from Stepped to a slower loop. Physics handles highlight movement anyway.
+task.spawn(function()
+    while task.wait(0.5) do
+        RefreshESP()
+    end
+end)
 
 --// PREMIUM: INFINITE STAMINA LOGIC
 task.spawn(function()
-    while task.wait() do
+    -- OPTIMIZATION: Reduced loop frequency
+    while task.wait(0.2) do
         if InfiniteStaminaEnabled then
             pcall(function()
                 local igPlayers = Workspace:FindFirstChild("InGamePlayers")
@@ -407,19 +413,6 @@ task.spawn(function()
     end
 end)
 
---// PREMIUM: GOD MODE LOGIC
-task.spawn(function()
-    while task.wait(0.5) do
-        if GodModeEnabled and LocalPlayer.Character then
-            for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    part.CanTouch = false 
-                end
-            end
-        end
-    end
-end)
-
 --// SMART NOCLIP
 local function ModifyPartCollision(part, noclipActive)
     if not part:IsA("BasePart") then return end
@@ -431,17 +424,31 @@ end
 local function ToggleNoclipSystem(enable)
     local cr = Workspace:FindFirstChild("CurrentRoom")
     if enable then
-        if cr then for _, v in pairs(cr:GetDescendants()) do ModifyPartCollision(v, true) end end
+        -- OPTIMIZATION: Yield inside the loop so changing thousands of parts doesn't hang the game
+        if cr then 
+            task.spawn(function()
+                for i, v in pairs(cr:GetDescendants()) do 
+                    ModifyPartCollision(v, true) 
+                    if i % 100 == 0 then task.wait() end
+                end 
+            end)
+        end
         if NoclipConnection then NoclipConnection:Disconnect() end
         NoclipConnection = Workspace.DescendantAdded:Connect(function(descendant)
             if NoclipEnabled and descendant:IsDescendantOf(Workspace:FindFirstChild("CurrentRoom")) then
-                task.wait() 
                 ModifyPartCollision(descendant, true)
             end
         end)
     else
         if NoclipConnection then NoclipConnection:Disconnect() NoclipConnection = nil end
-        if cr then for _, v in pairs(cr:GetDescendants()) do ModifyPartCollision(v, false) end end
+        if cr then 
+            task.spawn(function()
+                for i, v in pairs(cr:GetDescendants()) do 
+                    ModifyPartCollision(v, false) 
+                    if i % 100 == 0 then task.wait() end
+                end 
+            end)
+        end
     end
 end
 
@@ -464,7 +471,7 @@ local function AttemptAutoSkillcheck()
                     local goldX_Max = GoldZone.AbsolutePosition.X + GoldZone.AbsoluteSize.X
                     if cursorX >= goldX_Min and cursorX <= goldX_Max then
                         VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
-                        RunService.RenderStepped:Wait()
+                        task.wait(0.05)
                         VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
                         task.wait(1.5) 
                     end
@@ -486,7 +493,7 @@ local function AttemptAutoSkillcheck()
                     local ySize = yellow.AbsoluteSize.X
                     if sSize <= ySize and sSize >= (ySize - 25) then
                         VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
-                        RunService.RenderStepped:Wait()
+                        task.wait(0.05)
                         VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
                         task.wait(1) 
                     end
@@ -499,15 +506,18 @@ local function AttemptAutoSkillcheck()
     if treadmillGui and treadmillGui.Enabled then
         local viewportSize = workspace.CurrentCamera.ViewportSize
         VirtualInputManager:SendMouseButtonEvent(viewportSize.X/2, viewportSize.Y/2, 0, true, game, 1)
-        RunService.RenderStepped:Wait()
+        task.wait(0.05)
         VirtualInputManager:SendMouseButtonEvent(viewportSize.X/2, viewportSize.Y/2, 0, false, game, 1)
         task.wait(math.random(5, 15) / 100) 
     end
 end
 
-RunService.RenderStepped:Connect(function()
-    if AutoSkillCheckEnabled then
-        AttemptAutoSkillcheck()
+-- OPTIMIZATION: Shifted from RenderStepped to a fast loop to save main thread overhead
+task.spawn(function()
+    while task.wait(0.05) do
+        if AutoSkillCheckEnabled then
+            AttemptAutoSkillcheck()
+        end
     end
 end)
 
@@ -625,7 +635,7 @@ function Library:ShowPremiumWarning(OnAccept)
     UnderstandBtn.Text = "I Understand"
     UnderstandBtn.Size = UDim2.new(0.4, 0, 0, 40)
     UnderstandBtn.Position = UDim2.new(0.55, 0, 0.8, 0)
-    UnderstandBtn.BackgroundColor3 = Theme.Sidebar -- Start Gray
+    UnderstandBtn.BackgroundColor3 = Theme.Sidebar 
     UnderstandBtn.TextColor3 = Theme.TextDim
     UnderstandBtn.Font = Enum.Font.GothamBold
     Instance.new("UICorner", UnderstandBtn).CornerRadius = UDim.new(0, 8)
@@ -1110,7 +1120,6 @@ function Library:Init()
             TabBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
         end
         
-        -- PREMIUM WARNING LOGIC
         TabBtn.MouseButton1Click:Connect(function()
             if Name == "Premium 💎" and not PremiumWarningAccepted then
                 Library:ShowPremiumWarning(Activate)
@@ -1272,10 +1281,9 @@ function Library:Init()
             return Btn
         end
         
-        -- PLAYER LIST DROPDOWN CREATION
         function TabData:CreatePlayerList()
             local DropdownFrame = Instance.new("Frame", Page)
-            DropdownFrame.Size = UDim2.new(1, 0, 0, 40) -- Initial size (collapsed)
+            DropdownFrame.Size = UDim2.new(1, 0, 0, 40)
             DropdownFrame.BackgroundColor3 = Theme.Accent
             DropdownFrame.BackgroundTransparency = 0.2
             Instance.new("UICorner", DropdownFrame).CornerRadius = UDim.new(0, 10)
@@ -1298,7 +1306,7 @@ function Library:Init()
             BtnStroke.Thickness = 1
 
             local ToggleBtn = Instance.new("TextButton", DropdownFrame)
-            ToggleBtn.Size = UDim2.new(1, 0, 0, 40) -- Covers Top
+            ToggleBtn.Size = UDim2.new(1, 0, 0, 40)
             ToggleBtn.BackgroundTransparency = 1
             ToggleBtn.Text = "Select Player to Teleport ▼"
             ToggleBtn.TextColor3 = Theme.Text
@@ -1483,6 +1491,9 @@ FarmingTab:CreateButton("Auto Collect Holiday Items", function() AutoCollectItem
 
 local PremiumTab = Window:CreateTab("Premium 💎", "💎")
 PremiumTab:CreateToggle("Infinite Stamina", function(val) InfiniteStaminaEnabled = val end, false)
+
+-- OPTIMIZATION: Shifted God Mode off a while loop to an event listener
+local GodModeConn
 PremiumTab:CreateToggle("God Mode", function(val) 
     if not CheckPremium() then
         PlayAudio("Error")
@@ -1490,7 +1501,22 @@ PremiumTab:CreateToggle("God Mode", function(val)
         return
     end
     GodModeEnabled = val
-    if val then Library:Notify("God Mode", "Hitbox Removed (CanTouch = false)", 3) else Library:Notify("God Mode", "Disabled", 2) end
+    if val then 
+        local function ApplyGodMode(char)
+            for _, part in pairs(char:GetDescendants()) do
+                if part:IsA("BasePart") then part.CanTouch = false end
+            end
+        end
+        if LocalPlayer.Character then ApplyGodMode(LocalPlayer.Character) end
+        GodModeConn = LocalPlayer.CharacterAdded:Connect(function(char)
+            task.wait(0.5)
+            ApplyGodMode(char)
+        end)
+        Library:Notify("God Mode", "Hitbox Removed (CanTouch = false)", 3) 
+    else 
+        if GodModeConn then GodModeConn:Disconnect() end
+        Library:Notify("God Mode", "Disabled (Reset character to restore)", 2) 
+    end
 end, false)
 
 local StuffTab = Window:CreateTab("Stuff", "⚙️")
@@ -1537,4 +1563,4 @@ MobileToggle.MouseButton1Click:Connect(function()
     end
 end)
 
-print("Poorly Scripted v8.9 - Pastel Easter Theme Loaded")
+print("Poorly Scripted v8.9 - Pastel Easter Theme Loaded (Optimized)")
